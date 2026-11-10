@@ -135,7 +135,7 @@ def layout_filter(rcfg: dict, src_w: int, src_h: int) -> tuple[str, int]:
 def _probe_size(path: str) -> tuple[int, int]:
     out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
                           "stream=width,height", "-of", "csv=p=0:s=x", path],
-                         capture_output=True, text=True, check=True).stdout.strip()
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
     w, h = out.split("x")[:2]
     return int(w), int(h)
 
@@ -182,7 +182,7 @@ def render_clip(video_path: str, h: dict, words: list[dict], out_dir: Path, rcfg
            "-c:v", "libx264", "-preset", rcfg["preset"], "-crf", str(rcfg["crf"]),
            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
            "clip.mp4"]
-    res = subprocess.run(cmd, cwd=out_dir, capture_output=True, text=True)
+    res = subprocess.run(cmd, cwd=out_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg falhou:\n{res.stderr[-3000:]}")
     kept = sum(b - a for a, b in segs)

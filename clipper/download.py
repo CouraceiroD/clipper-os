@@ -94,5 +94,5 @@ def _probe_duration(p: Path) -> float:
     import subprocess
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(p)],
-        capture_output=True, text=True, check=True).stdout.strip()
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout.strip()
     return float(out)
