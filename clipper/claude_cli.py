@@ -27,6 +27,19 @@ class ClaudeCLIError(RuntimeError):
     pass
 
 
+# Quando o Clipper é lançado de dentro de uma sessão do Claude Code, o `claude -p` filho deve arrancar
+# como uma sessão nova e independente (mesma conta/autenticação), não como parte da sessão pai.
+_SESSION_VARS = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SESSION_ID", "CLAUDE_PID",
+                 "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_SESSION_ATTENDED", "CLAUDE_AFTER_LAST_COMPACT",
+                 "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN")
+
+
+def _child_env() -> dict:
+    env = {k: v for k, v in os.environ.items() if k not in _SESSION_VARS}
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
+
+
 def resolve_claude() -> list[str] | None:
     """Comando base para invocar o Claude Code, ou None se não estiver instalado."""
     exe = shutil.which("claude")
@@ -46,7 +59,7 @@ def run_plain(args: list[str], timeout: int = 120) -> subprocess.CompletedProces
     if not base:
         raise ClaudeCLIError("Comando `claude` não encontrado no PATH. Instala o Claude Code.")
     return subprocess.run(base + args, capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          cwd=PROJECT_ROOT, timeout=timeout)
+                          cwd=PROJECT_ROOT, timeout=timeout, env=_child_env())
 
 
 def mcp_status(name: str = "opusclip") -> tuple[str, str]:
@@ -90,7 +103,7 @@ def run(prompt: str, schema: dict, *, model: str, system: str | None = None,
         cmd += ["--disallowedTools", ",".join(disallowed_tools)]
     try:
         res = subprocess.run(cmd, input=prompt, capture_output=True, text=True, encoding="utf-8",
-                             errors="replace", cwd=PROJECT_ROOT, timeout=timeout)
+                             errors="replace", cwd=PROJECT_ROOT, timeout=timeout, env=_child_env())
     except subprocess.TimeoutExpired as e:
         raise ClaudeCLIError(f"claude -p excedeu {timeout}s") from e
     finally:
