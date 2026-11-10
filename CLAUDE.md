@@ -13,7 +13,9 @@ autopublicação, analytics.
 - Tools do OpusClip (sem créditos): `python -m clipper opusclip-tools`
 - Pipeline: `python -m clipper run "<url>" --provider own|opusclip|compare [--dry-run] [--yes]`
 - Re-render own: `python -m clipper render <vod-id>` (depois de editar `outputs/<vod-id>/own/highlights.json`)
-- Testes (sem rede/API/créditos): `python tests/smoke_test.py && python tests/test_compare_flow.py`
+- Testes (sem rede/API/créditos): `python tests/test_windows_compat.py`, `python tests/smoke_test.py`, `python tests/test_compare_flow.py`
+- Validação OpusClip depois do OAuth: `docs/OPUSCLIP_VALIDATION.md`
+- Utilizador em Windows 11 / PowerShell: comandos para ele em PowerShell (ver README)
 
 ## Escolha do modelo Whisper (`transcribe` no config.yaml)
 Verificar a GPU com `nvidia-smi`. Não escolher um modelo acima do que a VRAM aguenta.
@@ -50,4 +52,4 @@ Validar com uma transcrição curta (ex.: 10 s de áudio gerado com FFmpeg), nun
 - Nunca publicar/agendar nada (nem pelo MCP OpusClip). Uploads futuros começam `private`.
 - Respeitar copyright: só clipar canais com autorização; crédito ao criador na descrição.
 - Não commitar `data/`, `outputs/`, vídeos, `config.yaml`, `.env`, cookies, tokens ou credenciais OAuth.
-- Ao alterar código em `clipper/`, correr os dois testes antes de commitar. Commits pequenos e claros.
+- Ao alterar código em `clipper/`, correr os três testes antes de commitar. Commits pequenos e claros.

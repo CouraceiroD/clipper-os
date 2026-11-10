@@ -15,7 +15,8 @@ opusclip:
 
 transcribe:
   model: small           # tiny | base | small | medium | large-v3 (large-v3 com GPU NVIDIA)
-  device: auto           # auto | cpu | cuda
+  device: auto           # auto | cpu | cuda (ver tabela no CLAUDE.md)
+  compute_type: default  # default | int8 (CPU) | int8_float16 | float16 (GPU)
   language: null         # null = automático; "pt", "en", ...
 
 analyze:

@@ -12,54 +12,84 @@ VOD (URL) ─► clipper ──┤
 ```
 
 **Objetivo atual:** 1 VOD → até 5 candidatos → até 3 Shorts por engine → comparar own vs OpusClip.
+Nada é publicado nem carregado para nenhuma plataforma.
 
-## Instalação (no teu PC)
+## Instalação no Windows 11 (PowerShell)
 
-Requisitos: Python 3.10+, FFmpeg no PATH, Git, [Claude Code](https://code.claude.com) e uma conta OpusClip.
-GPU NVIDIA é opcional (acelera muito a transcrição).
+Uma vez só (depois fecha e reabre o PowerShell para o PATH atualizar):
 
-```bash
-git clone <o-teu-repo> clipper-os && cd clipper-os
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp config.example.yaml config.yaml # Windows: copy config.example.yaml config.yaml
-python tests/smoke_test.py
-python tests/test_compare_flow.py
+```powershell
+winget install -e --id Python.Python.3.12
+winget install -e --id Gyan.FFmpeg
+winget install -e --id Git.Git
+winget install -e --id DenoLand.Deno
+irm https://claude.ai/install.ps1 | iex
 ```
+
+O Deno é usado pelo yt-dlp para o YouTube. O último comando instala o Claude Code (`claude.exe`).
+Se já tens o Claude Code via npm (`claude.cmd`) também funciona.
+
+Projeto:
+
+```powershell
+git clone https://github.com/CouraceiroD/clipper-os.git
+cd clipper-os
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+Copy-Item config.example.yaml config.yaml
+```
+
+Se o `Activate.ps1` for bloqueado: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` e repete.
+
+### GPU NVIDIA (opcional)
+
+```powershell
+nvidia-smi
+pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"
+```
+
+Escolhe o modelo no `config.yaml` (secção `transcribe`) pela VRAM: ver a tabela em `CLAUDE.md`.
+Sem GPU: `model: small`, `device: cpu`, `compute_type: int8`. Se a GPU falhar, o sistema cai para CPU sozinho.
 
 ### Ligar o OpusClip (MCP oficial, OAuth)
 
-```bash
+Na pasta do projeto:
+
+```powershell
 claude mcp add --transport http opusclip https://mcp.opus.pro/mcp
+claude
 ```
 
-Depois, dentro desta pasta, abre `claude`, escreve `/mcp`, escolhe **opusclip** e faz login no browser.
-O token fica guardado pelo Claude Code fora do repositório. Nenhuma chave vai para o Git.
+Dentro do Claude Code: `/mcp` → **opusclip** → login no browser → sai com `/exit`.
+O token fica guardado pelo Claude Code fora do repositório.
 
-Confirmar tudo:
+### Verificar
 
-```bash
+```powershell
+python tests/test_windows_compat.py
+python tests/smoke_test.py
+python tests/test_compare_flow.py
 python -m clipper doctor
-python -m clipper opusclip-tools   # lista as tools do MCP e os créditos (não consome créditos)
+python -m clipper opusclip-tools
 ```
 
-### Claude para a análise do pipeline próprio
+`opusclip-tools` não gasta créditos: grava as tools e o saldo em `docs/opusclip_tools.md`.
+Depois segue `docs/OPUSCLIP_VALIDATION.md`.
 
-- `analyze.backend: claude_code` (por defeito no exemplo): usa a tua subscrição do Claude Code.
-- `analyze.backend: api`: usa `ANTHROPIC_API_KEY` (pago por uso).
+## Uso (um VOD de cada vez)
 
-## Uso
-
-```bash
-python -m clipper run "<URL do VOD>" --provider own --dry-run   # só lista os momentos (barato)
-python -m clipper run "<URL do VOD>" --provider compare         # own + OpusClip + relatório
-python -m clipper render <vod-id>                               # re-render own depois de editar highlights.json
+```powershell
+python -m clipper run "URL_DO_VOD" --provider own --dry-run   # só lista os momentos
+python -m clipper run "URL_DO_VOD" --provider compare         # own + OpusClip + relatório
+python -m clipper render <vod-id>                             # re-render own após editar highlights.json
 ```
 
-- OpusClip pede confirmação antes de gastar créditos (`--yes` para confirmar sem pergunta).
-- Tudo é retomável: voltar a correr o mesmo comando reutiliza download, transcrição, análise e o projeto
-  OpusClip já submetido. Não paga duas vezes.
+- O OpusClip pede confirmação antes de gastar créditos (`--yes` confirma sem pergunta).
+- Tudo é retomável e em cache: download, transcrição, análise e o projeto OpusClip já submetido.
+  Voltar a correr o mesmo comando nunca paga duas vezes.
+- Limites: `max_candidates: 5`, `max_renders: 3`, `max_vod_minutes: 240` (no `config.yaml`).
 
 ## Resultados
 
@@ -68,7 +98,7 @@ outputs/<vod-id>/
   own/        clip-01.mp4 … clip-03.mp4 + clip-NN.json + highlights.json (editável)
   opusclip/   clip-01.mp4 … clip-03.mp4 + clip-NN.json + state.json (project_id)
   comparison.json   todos os clips em formato comum + resumo + momentos partilhados
-  report.md         comparação legível + tabela de avaliação manual
+  report.md         lado a lado, detalhe, avaliação manual, vencedor, custos
   costs.json        minutos transcritos, tokens/custo Claude, chamadas, créditos OpusClip, tempos (cumulativo)
 ```
 

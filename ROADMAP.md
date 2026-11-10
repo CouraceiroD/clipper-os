@@ -17,13 +17,16 @@ Legenda: ✅ concluído · 🔨 em desenvolvimento · ⏳ pendente · 🅿️ pa
 ### Pipeline B — OpusClip (MCP oficial `https://mcp.opus.pro/mcp`, OAuth)
 - ✅ Engine `opusclip` operado pelo Claude Code (`claude -p` + MCP): submit → estado → clips + virality → export → download
 - ✅ Retomável e sem duplicar custos (`state.json` com `project_id`); confirmação antes de gastar créditos
-- ⏳ Login OAuth no PC do utilizador (`/mcp`) e `clipper opusclip-tools` para fixar os nomes reais das tools
+- ✅ Integração independente dos nomes das tools (o Claude escolhe-as); checklist em `docs/OPUSCLIP_VALIDATION.md`
+- ⏳ Login OAuth no PC do utilizador (`/mcp`) e `clipper opusclip-tools` para confirmar tools, créditos e export
 
 ### Comparação e custos
 - ✅ `provider: own | opusclip | compare`
 - ✅ `outputs/<vod>/own|opusclip/clip-NN.mp4`, `comparison.json`, `report.md` com tabela de avaliação manual
 - ✅ `costs.json` cumulativo: minutos transcritos, tokens/custo Claude, chamadas externas, créditos OpusClip, tempos
-- ✅ Proteções: `max_vod_minutes`, um VOD por execução, caches em todas as etapas
+- ✅ Proteções: `max_vod_minutes`, um VOD por execução, caches em todas as etapas, verificação do MCP antes de gastar
+- ✅ Compatibilidade Windows 11: `claude.exe`/`claude.cmd`, UTF-8, caminhos, CUDA com fallback para CPU, passos PowerShell
+- ✅ `report.md` com tabela lado a lado, edição usada, custos, tempos e secção de vencedor
 - ⏳ Primeiro VOD real em modo `compare` no PC do utilizador
 - ⏳ Avaliação manual dos 6 Shorts e decisão do que melhorar
 
