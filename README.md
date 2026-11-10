@@ -24,7 +24,12 @@ Ou diretamente no terminal:
 .\.venv\Scripts\python.exe -m clipper auto "URL_DA_LIVE"
 ```
 
-Opções: `--clips 5`, `--lang en`, `--layout split` (facecam em cima + jogo em baixo), `--reanalyze`.
+Opções: `--clips 5`, `--lang pt-PT`, `--layout split` (facecam em cima + jogo em baixo), `--reanalyze`.
+
+Títulos, hooks, descrições, hashtags, thumbnails e resumos saem em inglês (`analyze.metadata_language: en`).
+As legendas mantêm as palavras faladas; fala noutra língua só é traduzida para inglês com
+`transcribe.translate_captions: true`. Mudar o idioma de um VOD já analisado traduz só os textos (mesmos
+momentos) e guarda a versão anterior em `outputs/<vod-id>/<idioma>/`.
 
 ## O que o sistema faz
 

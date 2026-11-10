@@ -26,6 +26,8 @@ DEFAULTS: dict = {
         "device": "auto",          # auto | cpu | cuda
         "compute_type": "default", # default | int8 | float16
         "language": None,          # None = auto
+        "translate_captions": False,  # True: fala não inglesa -> legendas traduzidas para inglês (Whisper local)
+        "translate_model": "large-v3",  # modelo da tradução (o large-v3-turbo não traduz bem)
     },
     "analyze": {
         "backend": "claude_code",  # claude_code (subscrição, via claude -p) | api (ANTHROPIC_API_KEY)
@@ -35,7 +37,7 @@ DEFAULTS: dict = {
         "min_score": 65,
         "min_duration": 20,
         "max_duration": 75,
-        "metadata_language": "pt-PT",
+        "metadata_language": "en",  # idioma de títulos, hooks, descrições, hashtags e thumbnails
         "channel_context": "",
     },
     "render": {

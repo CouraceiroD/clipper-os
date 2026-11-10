@@ -16,7 +16,7 @@ from clipper import analyze as an  # noqa: E402
 from clipper.config import DEFAULTS, _merge  # noqa: E402
 from clipper.db import DB  # noqa: E402
 from clipper.render import render_clip  # noqa: E402
-from clipper.transcribe import all_words  # noqa: E402
+from clipper.transcribe import all_words, caption_transcript  # noqa: E402
 
 
 def make_video(path: Path, seconds: int = 60) -> None:
@@ -87,6 +87,16 @@ def main():
         print(f"OK {layout}: {size} {dur:.1f}s")
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-ss", "1", "-i", str(out),
                         "-frames:v", "1", str(tmp / f"frame_{layout}.jpg")], check=True)
+
+    # legendas: fala em inglês fica original; tradução só com translate_captions e fala noutra língua
+    assert caption_transcript(str(video), dict(tr, language="pt"), tmp, cfg) is None, "tradução desligada por defeito"
+    on = _merge(cfg, {"transcribe": {"translate_captions": True}})
+    assert caption_transcript(str(video), dict(tr, language="en"), tmp, on) is None, "inglês não se traduz"
+    en_words = [dict(w, word="HELLO") for w in words]
+    render_clip(str(video), chosen[0], words, tmp / "translated", cfg["render"], caption_words=en_words)
+    ass = (tmp / "translated" / "captions.ass").read_text(encoding="utf-8")
+    assert "HELLO" in ass and "MANO" not in ass, "legendas deviam usar as palavras traduzidas"
+    print("OK legendas traduzidas")
 
     db.add_clip("local:test", chosen[0], "x")
     assert db.overlaps_existing("local:test", 12, 38)

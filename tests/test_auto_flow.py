@@ -60,6 +60,7 @@ render: {{font: Inter}}
     auto_mod.probe_meta = lambda s: {k: v for k, v in meta.items() if k != "video_path"}
     auto_mod.fetch = lambda s, cfg: meta
     cfg = load_config(str(cfgp))
+    assert cfg["analyze"]["metadata_language"] == "en", "textos públicos em inglês por defeito"
     (source_dir(cfg["workdir"], meta["source_id"]) / "transcript.json").write_text(
         json.dumps(fake_transcript()), encoding="utf-8")
     analyze.MAX_CHARS_PER_CALL = 300   # força a análise por partes (como numa live longa)
@@ -82,6 +83,7 @@ render: {{font: Inter}}
 
     calls = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()]
     assert len(calls) >= 2, "devia analisar por partes"
+    assert all("Output language for ALL text fields: English" in c["prompt"] for c in calls), "prompt pede inglês"
     assert all(c["claudecode"] is None for c in calls), "variáveis da sessão pai passaram para o claude -p"
     assert not any("mcp__opusclip" in " ".join(c["args"]) for c in calls), "auto não pode usar OpusClip"
 
@@ -89,6 +91,22 @@ render: {{font: Inter}}
     cli.main(["--config", str(cfgp), "auto", url])      # 2.ª vez: tudo em cache, mesmos 3 clips
     assert len(log.read_text(encoding="utf-8").splitlines()) == n, "re-execução não devia chamar o Claude"
     assert sorted(p.name for p in out.iterdir()) == files
+
+    # mudar o idioma: mesmos momentos, só os textos são traduzidos; a versão anterior fica em <out>/en/
+    starts = [l for l in rep.splitlines() if l.startswith("- Momento original")]
+    cli.main(["--config", str(cfgp), "auto", url, "--lang", "pt-PT"])
+    calls = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()]
+    assert len(calls) == n + 1 and calls[-1]["localize"], "devia só traduzir, sem reanalisar"
+    assert "European Portuguese" in calls[-1]["prompt"]
+    assert sorted(p.name for p in (out / "en").iterdir()) == ["clip-01.mp4", "clip-02.mp4", "clip-03.mp4", "report.md"]
+    assert sorted(p.name for p in out.iterdir()) == ["clip-01.mp4", "clip-02.mp4", "clip-03.mp4", "en", "report.md"]
+    rep2 = (out / "report.md").read_text(encoding="utf-8")
+    assert [l for l in rep2.splitlines() if l.startswith("- Momento original")] == starts, "momentos mudaram"
+    assert rep2.count("Localized hook") == 3 and "Reação épica" not in rep2 and "textos em `pt-PT`" in rep2
+    assert "Reação épica" in (out / "en" / "report.md").read_text(encoding="utf-8")
+    cache = source_dir(cfg["workdir"], meta["source_id"])
+    assert (cache / "analysis.en.json").exists()
+    assert json.loads((cache / "analysis.json").read_text(encoding="utf-8"))["metadata_language"] == "pt-PT"
 
     print("OK auto flow:", out)
     if "--keep" not in sys.argv:

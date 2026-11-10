@@ -141,7 +141,10 @@ def _probe_size(path: str) -> tuple[int, int]:
 
 
 # ---------------------------------------------------------------- render
-def render_clip(video_path: str, h: dict, words: list[dict], out_dir: Path, rcfg: dict) -> Path:
+def render_clip(video_path: str, h: dict, words: list[dict], out_dir: Path, rcfg: dict,
+                caption_words: list[dict] | None = None) -> Path:
+    """caption_words: palavras das legendas, se diferentes das faladas (ex.: tradução para inglês).
+    Os cortes de silêncio usam sempre as palavras faladas."""
     out_dir.mkdir(parents=True, exist_ok=True)
     start, end = h["start"], h["end"]
     clip_words = [w for w in words if w["start"] >= start - 0.05 and w["end"] <= end + 0.05]
@@ -149,8 +152,10 @@ def render_clip(video_path: str, h: dict, words: list[dict], out_dir: Path, rcfg
     gap = rcfg["silence_gap"] if h.get("cut_silences", True) else 0
     segs = keep_segments(clip_words, start, end, gap)
 
+    cap_words = clip_words if caption_words is None else [
+        w for w in caption_words if w["start"] >= start - 0.05 and w["end"] <= end + 0.05]
     mapped = []
-    for w in clip_words:
+    for w in cap_words:
         s, e = remap(w["start"] - start, segs), remap(w["end"] - start, segs)
         if s is not None and e is not None and e > s:
             mapped.append({"start": s, "end": e, "word": w["word"]})

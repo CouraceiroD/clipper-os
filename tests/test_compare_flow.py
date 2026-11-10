@@ -33,9 +33,16 @@ schema = json.loads(args[args.index("--json-schema") + 1])
 props = schema.get("properties", {})
 prompt = sys.stdin.read()
 with open(os.environ["FAKE_CLAUDE_LOG"], "a", encoding="utf-8") as f:
-    f.write(json.dumps({"args": args, "prompt": prompt[:200], "claudecode": os.environ.get("CLAUDECODE")}) + "\n")
+    f.write(json.dumps({"args": args, "prompt": prompt[:600], "claudecode": os.environ.get("CLAUDECODE"),
+                        "localize": "localized" in props}) + "\n")
 mp4 = os.environ["FAKE_OPUS_MP4"]
-if "video_summary" in props:
+if "localized" in props:   # tradução dos textos de uma análise em cache: devolve os mesmos índices
+    import re
+    idx = sorted({int(i) for i in re.findall(r'"index": (\d+)', prompt)})
+    out = {"video_summary": "Localized summary.", "localized": [
+        {"index": i, "title": f"Localized {i}", "hook_text": "Localized hook", "summary": "s", "why_viral": "w",
+         "description": "d", "hashtags": ["clips"], "thumbnail_text": "LOCALIZED"} for i in idx]}
+elif "video_summary" in props:
     out = json.loads(os.environ["FAKE_ANALYSIS"])
 elif "project_id" in props:
     out = {"project_id": "proj_123", "credits_before": 900, "credits_unit": "credits", "plan": "Pro",

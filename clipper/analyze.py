@@ -16,10 +16,10 @@ CATEGORIES = ["funny", "rage", "clutch", "fail", "wholesome", "story", "hot_take
 CLIP_SCHEMA = {
     "type": "object",
     "properties": {
-        "start": {"type": "number", "description": "segundos no vídeo original"},
+        "start": {"type": "number", "description": "seconds in the original video"},
         "end": {"type": "number"},
         "title": {"type": "string"},
-        "hook_text": {"type": "string", "description": "texto curto no ecrã nos primeiros segundos"},
+        "hook_text": {"type": "string", "description": "short on-screen text for the first seconds"},
         "summary": {"type": "string"},
         "why_viral": {"type": "string"},
         "category": {"type": "string", "enum": CATEGORIES},
@@ -49,43 +49,49 @@ SCHEMA = {
     "additionalProperties": False,
 }
 
-SYSTEM = """És um editor sénior de short-form (YouTube Shorts, TikTok, Reels) especializado em clips de lives e vídeos longos.
-A tua tarefa é encontrar os momentos com MAIOR POTENCIAL VIRAL numa transcrição com timestamps, e rejeitar tudo o que é fraco.
+SYSTEM = """You are a senior short-form editor (YouTube Shorts, TikTok, Reels) specialised in clips from livestreams and long videos.
+Your job is to find the moments with the HIGHEST VIRAL POTENTIAL in a timestamped transcript, and reject everything weak.
 
-Procura (por ordem de valor):
-- emoção forte: humor, riso, raiva, choque, euforia, frustração genuína;
-- surpresa: algo inesperado, reviravolta, frase que ninguém esperava;
-- conflito: discussão, provocação, opinião polémica, "roast";
-- reação forte a algo (vitória, derrota, susto, revelação);
-- jogadas/feitos impressionantes (clutch, fail épico) quando a fala deixa perceber o que aconteceu;
-- frases citáveis, histórias curtas com final forte.
+Look for (in order of value):
+- strong emotion: humour, laughter, anger, shock, hype, genuine frustration;
+- surprise: something unexpected, a twist, a line nobody saw coming;
+- conflict: arguments, provocation, hot takes, roasts;
+- strong reactions (win, loss, jump scare, reveal);
+- impressive plays/feats (clutch, epic fail) when the speech makes it clear what happened;
+- quotable lines, short stories with a strong ending.
 
-Cada clip tem de:
-- ter gancho nos primeiros 1-3 s (frase forte, reação, conflito, pergunta, algo inesperado) — se o melhor gancho
-  está a meio, começa mais tarde;
-- ter arco completo: setup -> tensão -> payoff; começa pouco antes do setup e termina logo depois do payoff;
-- funcionar ISOLADO, sem conhecer o resto da live (ou com uma linha curta de contexto no hook_text).
+Every clip must:
+- hook in the first 1-3 s (strong line, reaction, conflict, question, something unexpected) - if the best hook
+  is in the middle, start later;
+- have a complete arc: setup -> tension -> payoff; start just before the setup and end right after the payoff;
+- work STANDALONE, without knowing the rest of the stream (or with one short line of context in hook_text).
 
-Rejeita sempre:
-- intros e "starting soon", cumprimentos ao chat, setup técnico, despedidas;
-- logística, leitura de donates/subs sem graça, publicidade;
-- pausas longas e momentos mortos;
-- momentos que dependem de algo visual que a transcrição não deixa perceber;
-- momentos repetidos: se dois momentos são sobre a mesma coisa, escolhe só o melhor. Prefere variedade.
+Always reject:
+- intros and "starting soon", greeting chat, technical setup, goodbyes;
+- logistics, unfunny donation/sub reading, ads;
+- long pauses and dead air;
+- moments that depend on visuals the transcript doesn't convey;
+- repeats: if two moments are about the same thing, keep only the best one. Prefer variety.
 
-Pontuação (sê exigente e honesto; a maioria dos momentos de uma live NÃO merece clip):
+Scoring (be strict and honest; most moments of a stream do NOT deserve a clip):
 - hook_score, emotion_score, payoff_score, standalone_score: 0-10.
-- viral_score: 0-100, a tua estimativa global. 80+ = excelente, 65-79 = bom, <65 = fraco.
+- viral_score: 0-100, your overall estimate. 80+ = excellent, 65-79 = good, <65 = weak.
 
-Regras:
-- start/end em segundos do vídeo original, alinhados com os timestamps fornecidos.
-- Clips não se sobrepõem.
-- cut_silences=false quando o momento depende de ação/silêncio dramático (ex.: jogada sem fala); true quando é sobretudo fala.
-- why_viral: explica em 1-2 frases concretas porque este momento prende (o gancho, a emoção, o payoff).
-- Metadados (title, hook_text, description, hashtags, thumbnail_text) no idioma pedido. Título <= 70 caracteres, curiosidade sem clickbait falso.
-- hook_text: curto e forte, no máximo 8 palavras, aparece no ecrã nos primeiros segundos. thumbnail_text: 2-4 palavras.
-- description: 1-2 frases + crédito ao criador original (nome do canal).
-- hashtags: 3-6, sem o símbolo #.
+Rules:
+- start/end in seconds of the original video, aligned with the given timestamps.
+- Clips must not overlap.
+- cut_silences=false when the moment depends on action/dramatic silence (e.g. a play with no talking); true when it is mostly speech.
+- why_viral: 1-2 concrete sentences on why this moment grabs attention (the hook, the emotion, the payoff).
+
+Language (very important):
+- ALL text fields (title, hook_text, description, hashtags, thumbnail_text, summary, why_viral, video_summary)
+  are written in the requested output language, whatever language is spoken in the video.
+- Write like a native creator in that language posting to YouTube Shorts/TikTok: natural, punchy, idiomatic.
+  Never a literal translation. Quotes from the stream may stay in the original wording when they are the joke.
+- Title <= 70 characters, curiosity without fake clickbait.
+- hook_text: short and strong, max 8 words, shown on screen in the first seconds. thumbnail_text: 2-4 words.
+- description: 1-2 sentences + credit to the original creator (channel name).
+- hashtags: 3-6, without the # symbol, the ones people actually search in that language.
 """
 
 # Lives longas são analisadas por partes (~4 h de fala por chamada) para caberem no contexto.
@@ -116,20 +122,35 @@ def _chunks(segments: list[dict], max_chars: int) -> list[list[dict]]:
     return chunks
 
 
+LANG_NAMES = {"en": "English", "pt-PT": "European Portuguese (pt-PT)", "pt-BR": "Brazilian Portuguese (pt-BR)",
+              "pt": "Portuguese", "es": "Spanish", "fr": "French", "de": "German", "it": "Italian"}
+LEGACY_LANGUAGE = "pt-PT"   # análises em cache sem `metadata_language` foram geradas em pt-PT
+
+
+def lang_name(code: str) -> str:
+    return LANG_NAMES.get(code, code)
+
+
+def _language_line(cfg: dict) -> str:
+    name = lang_name(cfg["analyze"]["metadata_language"])
+    return (f"Output language for ALL text fields: {name}. Natural, native-sounding {name} for YouTube Shorts/TikTok, "
+            f"even if the stream is in another language.")
+
+
 def _user_prompt(segments: list[dict], meta: dict, cfg: dict, part: str = "") -> str:
     a = cfg["analyze"]
-    return f"""Fonte: "{meta.get('title')}" do canal "{meta.get('channel')}" (duração {meta.get('duration') or 0:.0f}s).{part}
-Contexto do canal/streamer: {a['channel_context'] or 'n/d'}
-Idioma dos metadados: {a['metadata_language']}
-Duração de cada clip: entre {a['min_duration']} e {a['max_duration']} segundos.
-Devolve até {a['max_clips'] * 2} candidatos ordenados por viral_score (inclui alguns médios para eu poder filtrar).
+    return f"""Source: "{meta.get('title')}" from the channel "{meta.get('channel')}" (duration {meta.get('duration') or 0:.0f}s).{part}
+Channel/streamer context: {a['channel_context'] or 'n/a'}
+{_language_line(cfg)}
+Length of each clip: between {a['min_duration']} and {a['max_duration']} seconds.
+Return up to {a['max_clips'] * 2} candidates sorted by viral_score (include a few average ones so I can filter).
 
-Transcrição ([início-fim em segundos] texto):
+Transcript ([start-end in seconds] text):
 {_format_segments(segments)}
 """
 
 
-def _call_api(system: str, user: str, cfg: dict, tracker=None) -> dict:
+def _call_api(system: str, user: str, cfg: dict, tracker=None, schema: dict = SCHEMA) -> dict:
     import anthropic
 
     a = cfg["analyze"]
@@ -143,7 +164,7 @@ def _call_api(system: str, user: str, cfg: dict, tracker=None) -> dict:
         fallbacks="default",
         system=system,
         output_config={"effort": a["effort"],
-                       "format": {"type": "json_schema", "schema": SCHEMA}},
+                       "format": {"type": "json_schema", "schema": schema}},
         messages=[{"role": "user", "content": user}],
     ) as stream:
         msg = stream.get_final_message()
@@ -160,11 +181,11 @@ def _call_api(system: str, user: str, cfg: dict, tracker=None) -> dict:
     return json.loads(text)
 
 
-def _call_claude_code(system: str, user: str, cfg: dict, tracker=None) -> dict:
+def _call_claude_code(system: str, user: str, cfg: dict, tracker=None, schema: dict = SCHEMA) -> dict:
     from . import claude_cli
 
     model = cfg["analyze"]["model"]
-    out, info = claude_cli.run(user, SCHEMA, model=model, system=system,
+    out, info = claude_cli.run(user, schema, model=model, system=system,
                                disallowed_tools=["Bash", "Edit", "Write", "WebFetch", "WebSearch"])
     print(f"[analyze] tokens in={info['input_tokens']} out={info['output_tokens']} (claude -p)")
     if tracker:
@@ -236,8 +257,8 @@ def analyze(transcript: dict, meta: dict, cfg: dict, tracker=None) -> dict:
     for k, segs in enumerate(parts, 1):
         part = ""
         if len(parts) > 1:
-            part = (f"\nATENÇÃO: esta é a parte {k} de {len(parts)} da transcrição "
-                    f"({segs[0]['start']:.0f}s a {segs[-1]['end']:.0f}s). Analisa só esta parte.")
+            part = (f"\nNOTE: this is part {k} of {len(parts)} of the transcript "
+                    f"({segs[0]['start']:.0f}s to {segs[-1]['end']:.0f}s). Analyse only this part.")
         user = _user_prompt(segs, meta, cfg, part)
         print(f"[analyze] backend={backend} parte {k}/{len(parts)} (~{len(user) // 4} tokens)")
         res = call(SYSTEM, user, cfg, tracker)
@@ -247,7 +268,66 @@ def analyze(transcript: dict, meta: dict, cfg: dict, tracker=None) -> dict:
         merged["clips"] += res.get("clips", [])
     if len(parts) > 1:
         merged["clips"] = _dedupe(merged["clips"])
+    merged["metadata_language"] = cfg["analyze"]["metadata_language"]
     return merged
+
+
+# ---------------------------------------------------------------- tradução de uma análise em cache
+TEXT_FIELDS = ["title", "hook_text", "summary", "why_viral", "description", "hashtags", "thumbnail_text"]
+
+LOCALIZE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "video_summary": {"type": "string"},
+        "localized": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"index": {"type": "integer"},
+                           **{k: CLIP_SCHEMA["properties"][k] for k in TEXT_FIELDS}},
+            "required": ["index", *TEXT_FIELDS],
+            "additionalProperties": False,
+        }},
+    },
+    "required": ["video_summary", "localized"],
+    "additionalProperties": False,
+}
+
+LOCALIZE_SYSTEM = """You are a senior short-form editor (YouTube Shorts, TikTok, Reels).
+The clips below were already chosen and scored. Do NOT change which moments they are.
+Rewrite ONLY their text fields (title, hook_text, summary, why_viral, description, hashtags, thumbnail_text)
+and the video_summary in the requested output language, as a native creator would write them:
+natural, punchy, idiomatic - never a literal translation. Use the transcript of each clip to get the meaning right.
+Same limits: title <= 70 characters; hook_text max 8 words; thumbnail_text 2-4 words;
+description 1-2 sentences + credit to the original creator (channel name); hashtags 3-6 without the # symbol.
+Return one entry per clip with the same index.
+"""
+
+
+def localize(raw: dict, transcript: dict, meta: dict, cfg: dict, tracker=None) -> dict:
+    """Reescreve os textos de uma análise em cache no idioma configurado, sem mudar momentos nem scores."""
+    backend = cfg["analyze"]["backend"]
+    call = _call_claude_code if backend == "claude_code" else _call_api
+    words = all_words(transcript)
+    items = []
+    for i, c in enumerate(raw["clips"]):
+        text = " ".join(w["word"] for w in words if w["start"] >= c["start"] - 0.5 and w["end"] <= c["end"] + 0.5)
+        items.append({"index": i, "category": c["category"], **{k: c[k] for k in TEXT_FIELDS},
+                      "transcript": text[:3000]})
+    user = (f'Source: "{meta.get("title")}" from the channel "{meta.get("channel")}".\n'
+            f"{_language_line(cfg)}\n\n"
+            f"video_summary: {raw.get('video_summary', '')}\n\n"
+            f"Clips (JSON):\n{json.dumps(items, ensure_ascii=False, indent=1)}\n")
+    print(f"[analyze] a traduzir os textos de {len(items)} candidato(s) para {cfg['analyze']['metadata_language']}")
+    res = call(LOCALIZE_SYSTEM, user, cfg, tracker, LOCALIZE_SCHEMA)
+    out = json.loads(json.dumps(raw))
+    by_index = {x["index"]: x for x in res.get("localized", [])}
+    missing = [i for i in range(len(out["clips"])) if i not in by_index]
+    if missing:
+        raise RuntimeError(f"Tradução incompleta: faltam os candidatos {missing}")
+    for i, c in enumerate(out["clips"]):
+        c.update({k: by_index[i][k] for k in TEXT_FIELDS})
+    out["video_summary"] = res.get("video_summary") or out.get("video_summary", "")
+    out["metadata_language"] = cfg["analyze"]["metadata_language"]
+    return out
 
 
 def _dedupe(clips: list[dict]) -> list[dict]:

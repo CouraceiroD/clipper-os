@@ -20,6 +20,8 @@ transcribe:
   device: auto           # auto | cpu | cuda (ver tabela no CLAUDE.md)
   compute_type: default  # default | int8 (CPU) | int8_float16 | float16 (GPU)
   language: null         # null = automático; "pt", "en", ...
+  translate_captions: false  # true: fala não inglesa -> legendas traduzidas para inglês (inglês fica original)
+  translate_model: large-v3  # modelo da tradução (o large-v3-turbo não traduz bem)
 
 analyze:
   backend: claude_code   # claude_code (a tua subscrição, via `claude -p`) | api (ANTHROPIC_API_KEY)
@@ -28,7 +30,7 @@ analyze:
   min_score: 65
   min_duration: 20
   max_duration: 75
-  metadata_language: pt-PT
+  metadata_language: en   # título, hook, descrição, hashtags, thumbnail e resumos (ex: en, pt-PT)
   channel_context: ""    # ex: "Streamer PT de FPS, humor ácido, público 16-25"
 
 render:

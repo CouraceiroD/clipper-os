@@ -15,7 +15,9 @@ Quando o utilizador pedir clips/Shorts de uma live, stream, VOD ou vídeo — po
 ```
 
 - Python do venv: Windows `.venv/Scripts/python.exe`, Linux/macOS `.venv/bin/python`.
-- Opções só se pedidas: `--clips N`, `--lang en`, `--layout split|crop|blur`, `--reanalyze`.
+- Opções só se pedidas: `--clips N`, `--lang pt-PT`, `--layout split|crop|blur`, `--reanalyze`.
+- Textos públicos (título, hook, descrição, hashtags, thumbnail) em inglês por defeito; legendas com as palavras
+  faladas (tradução para inglês só com `transcribe.translate_captions: true`).
 - No fim lê `outputs/<vod-id>/report.md` e responde com os ficheiros, títulos, scores, hooks e porquê.
 - Resultado: `outputs/<vod-id>/clip-01.mp4`, `clip-02.mp4`, `clip-03.mp4`, `report.md`.
 - Tudo local: yt-dlp, faster-whisper, FFmpeg e o Claude Code do utilizador (`claude -p`). Sem serviços pagos extra.
