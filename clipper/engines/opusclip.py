@@ -19,7 +19,14 @@ from pathlib import Path
 from .. import claude_cli
 
 ALLOWED = ["mcp__opusclip"]
-DISALLOWED = ["Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Task"]
+# Tools reais do MCP OpusClip (confirmadas) que este sistema nunca pode usar: publicar, partilhar, editar, etc.
+_NEVER = ["schedule_publish", "unschedule_publish", "create_post_task", "share_project", "edit_clip",
+          "duplicate_clip", "create_censor_job", "create_social_copy_job", "create_upload_link",
+          "create_collection", "add_clip_to_collection", "export_collection"]
+DISALLOWED = (["Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Task"]
+              + [f"mcp__opusclip__opusclip_{t}" for t in _NEVER])
+# submit_project é a única tool que gasta créditos: só é permitida na fase de submissão.
+NO_SUBMIT = DISALLOWED + ["mcp__opusclip__opusclip_submit_project"]
 
 SYSTEM = """Estás a operar a conta OpusClip do utilizador através das tools do MCP `opusclip`.
 Regras de segurança e custo (obrigatórias):
@@ -135,8 +142,9 @@ class OpusClipEngine:
 
     def _claude(self, purpose: str, prompt: str, schema: dict, timeout: int = 900) -> dict:
         model = self.o["operator_model"]
+        blocked = DISALLOWED if purpose == "submit" else NO_SUBMIT
         out, info = claude_cli.run(prompt, schema, model=model, system=SYSTEM,
-                                   allowed_tools=ALLOWED, disallowed_tools=DISALLOWED, timeout=timeout)
+                                   allowed_tools=ALLOWED, disallowed_tools=blocked, timeout=timeout)
         self.tracker.claude(f"opusclip.{purpose}", model, info["input_tokens"], info["output_tokens"],
                             info["cache_read"], info["cost_usd"], backend="claude_code")
         self.tracker.call("opusclip_mcp_session")
@@ -153,14 +161,16 @@ class OpusClipEngine:
         a = self.cfg["analyze"]
         prompt = f"""Tarefa: criar UM projeto de clipping no OpusClip para este vídeo e devolver o id.
 
-1. Primeiro consulta os créditos/uso restantes da conta (tool de usage/créditos, se existir) -> credits_before.
+1. Primeiro consulta os créditos com opusclip_get_usage -> credits_before = credits.remaining_minutes
+   (credits_unit = "minutes").
 2. Submete o projeto com este URL: {url}
-   Opções desejadas (aplica as que as tools suportarem e diz quais aplicaste em options_applied):
-   - formato vertical 9:16 com reframing automático (AI reframe)
-   - legendas automáticas ativadas
-   - duração dos clips entre {a['min_duration']} e {a['max_duration']} segundos
-   - idioma do vídeo: {self.cfg['transcribe']['language'] or 'auto'}
-   - se houver opção de processar só parte do vídeo, processa o vídeo inteiro
+   com opusclip_submit_project (modo de clipping normal: NÃO uses skipSlicing nem skipCurate):
+   - aspectRatio: "portrait" (9:16, com reframe automático)
+   - enableCaption: true
+   - clipDurationsSec: [[{a['min_duration']}, {a['max_duration']}]]
+   - sourceLang: {self.cfg['transcribe']['language'] or 'omitir (deteção automática)'}
+   - sem rangeStart/rangeEnd (vídeo inteiro)
+   Diz em options_applied os parâmetros que usaste.
 3. Não esperes que termine. Devolve o project_id logo após a submissão.
 """
         with self.tracker.stage("opusclip.submit"):
@@ -182,8 +192,9 @@ class OpusClipEngine:
         deadline = time.time() + self.o["max_wait_minutes"] * 60
         with self.tracker.stage("opusclip.wait"):
             while True:
-                res = self._claude("status", f"""Consulta o estado de processamento do projeto OpusClip `{pid}`
-(só leitura; não cries nem alteres nada). Devolve status e progresso.""", STATUS_SCHEMA, timeout=300)
+                res = self._claude("status", f"""Consulta o estado do projeto OpusClip `{pid}` com opusclip_list_clips
+(campo `stage`; lista vazia com stage em curso = ainda a processar). Só leitura; não cries nem alteres nada.
+Devolve status (done quando os clips estão prontos) e progresso.""", STATUS_SCHEMA, timeout=300)
                 print(f"[opusclip] estado={res['status']} progresso={res['progress_percent']}  {res['notes'][:120]}")
                 if res["status"] == "done":
                     break

@@ -33,7 +33,7 @@ schema = json.loads(args[args.index("--json-schema") + 1])
 props = schema.get("properties", {})
 prompt = sys.stdin.read()
 with open(os.environ["FAKE_CLAUDE_LOG"], "a", encoding="utf-8") as f:
-    f.write(json.dumps({"args": args, "prompt": prompt[:200]}) + "\n")
+    f.write(json.dumps({"args": args, "prompt": prompt[:200], "claudecode": os.environ.get("CLAUDECODE")}) + "\n")
 mp4 = os.environ["FAKE_OPUS_MP4"]
 if "video_summary" in props:
     out = json.loads(os.environ["FAKE_ANALYSIS"])
@@ -128,6 +128,11 @@ render: {{font: Inter}}
     opus_calls = [c for c in calls if "mcp__opusclip" in " ".join(c["args"])]
     assert len(opus_calls) == 3, len(opus_calls)                         # submit, status, fetch
     assert sum("proj_" not in c["prompt"] and "criar UM projeto" in c["prompt"] for c in opus_calls) == 1
+    for c in opus_calls:   # submit_project (gasta créditos) só pode estar disponível na fase de submit
+        blocked = c["args"][c["args"].index("--disallowedTools") + 1]
+        is_submit = "criar UM projeto" in c["prompt"]
+        assert ("opusclip_submit_project" in blocked) != is_submit, c["prompt"][:60]
+        assert "opusclip_schedule_publish" in blocked
 
     # Segunda execução: tudo em cache -> não volta a submeter nem a analisar
     n_before = len(calls)
