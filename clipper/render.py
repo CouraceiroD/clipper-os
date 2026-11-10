@@ -1,4 +1,4 @@
-"""Montagem do clip vertical 9:16 com FFmpeg, numa só passagem:
+"""Montagem do clip vertical 9:16 com FFmpeg (medição de loudness + uma passagem de render):
 corte do intervalo -> remoção de silêncios -> layout vertical -> legendas dinâmicas + hook -> áudio normalizado.
 """
 from __future__ import annotations
@@ -142,7 +142,7 @@ def _probe_size(path: str) -> tuple[int, int]:
 
 # ---------------------------------------------------------------- render
 def render_clip(video_path: str, h: dict, words: list[dict], out_dir: Path, rcfg: dict,
-                caption_words: list[dict] | None = None) -> Path:
+                caption_words: list[dict] | None = None, out_name: str = "clip.mp4") -> Path:
     """caption_words: palavras das legendas, se diferentes das faladas (ex.: tradução para inglês).
     Os cortes de silêncio usam sempre as palavras faladas."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -165,31 +165,90 @@ def render_clip(video_path: str, h: dict, words: list[dict], out_dir: Path, rcfg
     (out_dir / "captions.ass").write_text(build_ass(mapped, h.get("hook_text", ""), rcfg, cap_y),
                                           encoding="utf-8")
 
+    src = ["-ss", f"{start:.3f}", "-to", f"{end:.3f}", "-i", str(Path(video_path).resolve())]
+    a_graph = _audio_graph(segs)
+    norm = _measure_loudness(src, a_graph)
+
     n = len(segs)
-    fc = []
+    fc = [a_graph]
     if n == 1:
-        fc.append("[0:v]setpts=PTS-STARTPTS[vc];[0:a]asetpts=PTS-STARTPTS[ac]")
+        fc.append("[0:v]setpts=PTS-STARTPTS[vc]")
     else:
         fc.append(f"[0:v]split={n}" + "".join(f"[vs{i}]" for i in range(n)))
-        fc.append(f"[0:a]asplit={n}" + "".join(f"[as{i}]" for i in range(n)))
         for i, (a, b) in enumerate(segs):
             fc.append(f"[vs{i}]trim=start={a}:end={b},setpts=PTS-STARTPTS[v{i}]")
-            fc.append(f"[as{i}]atrim=start={a}:end={b},asetpts=PTS-STARTPTS[a{i}]")
-        fc.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[vc][ac]")
+        fc.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[vc]")
     fc.append(lay)
-    fc.append("[vl]fps=30,subtitles=captions.ass[vout]")
-    fc.append("[ac]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]")
+    fc.append(f"[vl]fps={FPS},subtitles=captions.ass,setpts=PTS-STARTPTS[vout]")
+    fc.append(f"[ac]{norm},aresample={AUDIO_RATE},aformat=sample_fmts=fltp:channel_layouts=stereo,"
+              f"afade=t=in:st=0:d={AUDIO_FADE_IN},asetpts=PTS-STARTPTS[aout]")
 
-    out = out_dir / "clip.mp4"
-    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-           "-ss", f"{start:.3f}", "-to", f"{end:.3f}", "-i", str(Path(video_path).resolve()),
+    out = out_dir / out_name
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", *src,
            "-filter_complex", ";".join(fc), "-map", "[vout]", "-map", "[aout]",
-           "-c:v", "libx264", "-preset", rcfg["preset"], "-crf", str(rcfg["crf"]),
-           "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart",
-           "clip.mp4"]
+           *youtube_shorts_output_args(rcfg), out_name]
     res = subprocess.run(cmd, cwd=out_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg falhou:\n{res.stderr[-3000:]}")
     kept = sum(b - a for a, b in segs)
     print(f"[render] {out}  ({end - start:.1f}s -> {kept:.1f}s, {n} segmento(s))")
     return out
+
+
+# ---------------------------------------------------------------- perfil de exportação (YouTube Shorts)
+# Antes: loudnorm numa passagem (modo dinâmico). Demora ~3 s a estabilizar o ganho: em fontes muito altas os primeiros
+# segundos saíam ~6 dB acima do resto e muito comprimidos. Localmente soa bem, mas depois da normalização e do
+# re-encode do YouTube esse início fica distorcido. O loudnorm em duas passagens também não chega: com fontes
+# saturadas (LRA ou true peak altos) volta sozinho ao modo dinâmico. Agora: medir o clip inteiro, aplicar um ganho
+# constante até -14 LUFS e apanhar os picos com um limitador com look-ahead (sem rampa no arranque).
+FPS = 30
+AUDIO_RATE = 48000
+AUDIO_BITRATE = "192k"
+AUDIO_FADE_IN = 0.05            # 50 ms: protege o arranque de artefactos do encoder/transcoder
+TARGET_LUFS = -14.0             # referência do YouTube
+PEAK_LIMIT_DB = -3.0            # teto de pico por amostra; o AAC acrescenta ~1 dB entre amostras -> true peak <= -1,5
+MAX_GAIN_DB = 20.0              # não levantar ruído em clips quase mudos
+
+
+def youtube_shorts_output_args(rcfg: dict) -> list[str]:
+    """H.264 High yuv420p CFR 30 fps (GOP de 0,5 s, como o YouTube recomenda) + AAC-LC 48 kHz estéreo 192k.
+    Sem metadados/capítulos da fonte, moov no início. Os timestamps começam em 0: o atraso do AAC (priming) fica
+    numa edit list do MP4, que é o mecanismo padrão (não usar -avoid_negative_ts, que desloca os streams)."""
+    return ["-c:v", "libx264", "-preset", rcfg["preset"], "-crf", str(rcfg["crf"]),
+            "-profile:v", "high", "-pix_fmt", "yuv420p", "-r", str(FPS), "-g", str(FPS // 2), "-bf", "2",
+            "-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709",
+            "-c:a", "aac", "-profile:a", "aac_low", "-ar", str(AUDIO_RATE), "-ac", "2", "-b:a", AUDIO_BITRATE,
+            "-map_metadata", "-1", "-map_chapters", "-1", "-movflags", "+faststart"]
+
+
+def _audio_graph(segs: list[tuple[float, float]]) -> str:
+    """[0:a] -> cortes de silêncio -> [ac], com timestamps reiniciados em cada segmento."""
+    n = len(segs)
+    if n == 1:
+        return "[0:a]asetpts=PTS-STARTPTS[ac]"
+    parts = [f"[0:a]asplit={n}" + "".join(f"[as{i}]" for i in range(n))]
+    for i, (a, b) in enumerate(segs):
+        parts.append(f"[as{i}]atrim=start={a}:end={b},asetpts=PTS-STARTPTS[a{i}]")
+    parts.append("".join(f"[a{i}]" for i in range(n)) + f"concat=n={n}:v=0:a=1[ac]")
+    return ";".join(parts)
+
+
+def loudness_filter(integrated_lufs: float | None) -> str:
+    """Ganho constante até TARGET_LUFS + limitador de picos (sem auto-nível, para não mexer no ganho)."""
+    gain = 0.0 if integrated_lufs is None else min(MAX_GAIN_DB, TARGET_LUFS - integrated_lufs)
+    limit = 10 ** (PEAK_LIMIT_DB / 20)
+    return f"volume={gain:.2f}dB,alimiter=limit={limit:.4f}:attack=5:release=50:level=0"
+
+
+def _measure_loudness(src: list[str], a_graph: str) -> str:
+    """Mede a loudness integrada do áudio final do clip (só áudio, rápido) e devolve o filtro de normalização."""
+    cmd = ["ffmpeg", "-hide_banner", "-nostats", *src, "-filter_complex",
+           f"{a_graph};[ac]ebur128=framelog=quiet[m]", "-map", "[m]", "-vn", "-f", "null", "-"]
+    res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    summary = res.stderr[res.stderr.rfind("Summary:"):]
+    m = re.search(r"I:\s+(-?[\d.]+|-inf) LUFS", summary)
+    if res.returncode != 0 or not m:
+        print("[render] ⚠ medição de loudness falhou; áudio sem ganho (só limitador)")
+        return loudness_filter(None)
+    lufs = float(m.group(1))
+    return loudness_filter(None if lufs == float("-inf") or lufs < -70 else lufs)

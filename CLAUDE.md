@@ -40,7 +40,8 @@ Quando o utilizador pedir clips/Shorts de uma live, stream, VOD ou vídeo — po
 - Comparação opcional com OpusClip: `python -m clipper opusclip-tools`, `python -m clipper run "<url>" --provider compare`
 - Testes (sem rede/API/créditos):
   `python tests/test_windows_compat.py`, `python tests/smoke_test.py`, `python tests/test_auto_flow.py`,
-  `python tests/test_compare_flow.py`, `python tests/test_language.py` — correr todos antes de commitar alterações em `clipper/`.
+  `python tests/test_compare_flow.py`, `python tests/test_language.py`,
+  `python tests/test_render_profile.py` — correr todos antes de commitar alterações em `clipper/`.
 
 ## Escolha do modelo Whisper (`transcribe` no config.yaml)
 
@@ -61,7 +62,8 @@ sozinho para CPU.
 
 - `clipper/auto.py` modo automático (fluxo principal) + `report.md`
 - `clipper/analyze.py` prompt de seleção viral, schema, análise por partes em lives longas, seleção
-- `clipper/render.py` FFmpeg numa passagem: cortes, silêncios, 9:16 (blur/crop/split), hook, legendas, loudnorm
+- `clipper/render.py` FFmpeg: cortes, silêncios, 9:16 (blur/crop/split), hook, legendas, loudness (ganho constante
+  + limitador) e perfil de exportação para YouTube Shorts (H.264 CFR 30, AAC-LC 48 kHz estéreo 192k)
 - `clipper/transcribe.py` faster-whisper com fallback CPU; `clipper/download.py` yt-dlp
 - `clipper/claude_cli.py` `claude -p --json-schema` (compatível com claude.exe/claude.cmd)
 - `clipper/cli.py` comandos; `clipper/db.py` histórico SQLite (evita clips repetidos)
