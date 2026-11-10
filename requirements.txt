@@ -1,0 +1,4 @@
+anthropic>=2.7
+faster-whisper>=1.2
+yt-dlp>=2026.10.26
+pyyaml>=6
