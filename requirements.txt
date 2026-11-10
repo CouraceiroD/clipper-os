@@ -1,4 +1,5 @@
 anthropic>=2.7
 faster-whisper>=1.2
-yt-dlp>=2026.10.26
+yt-dlp[default]>=2026.10.26   # [default] inclui yt-dlp-ejs (necessário para o YouTube)
 pyyaml>=6
+# GPU NVIDIA (opcional): pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"

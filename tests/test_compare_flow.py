@@ -23,6 +23,12 @@ FAKE_CLAUDE = r'''#!/usr/bin/env python3
 import json, os, pathlib, sys
 sys.stdin.reconfigure(encoding="utf-8")
 args = sys.argv[1:]
+if args[:2] == ["mcp", "list"]:
+    print("Checking MCP server health...\n\nopusclip: https://mcp.opus.pro/mcp (HTTP) - \u2713 Connected")
+    sys.exit(0)
+assert "--append-system-prompt-file" in args or "--append-system-prompt" not in args
+if "--append-system-prompt-file" in args:
+    assert os.path.exists(args[args.index("--append-system-prompt-file") + 1])
 schema = json.loads(args[args.index("--json-schema") + 1])
 props = schema.get("properties", {})
 prompt = sys.stdin.read()
@@ -116,6 +122,7 @@ render: {{font: Inter}}
     assert own[0]["media"]["height"] == 1920
     report = (out / "report.md").read_text(encoding="utf-8")
     assert "Avaliação manual" in report and "Créditos OpusClip" in report
+    assert "## Lado a lado" in report and "## Vencedor" in report and "layout blur" in report
 
     calls = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()]
     opus_calls = [c for c in calls if "mcp__opusclip" in " ".join(c["args"])]
