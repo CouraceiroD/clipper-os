@@ -176,7 +176,7 @@ def cmd_doctor(args, cfg) -> None:
     has_claude = shutil.which("claude")
     check("Claude Code (claude)", has_claude, "instala o Claude Code")
     if has_claude:
-        res = subprocess.run(["claude", "mcp", "list"], capture_output=True, text=True)
+        res = subprocess.run([has_claude, "mcp", "list"], capture_output=True, text=True, timeout=120)
         line = next((l for l in res.stdout.splitlines() if l.lower().startswith("opusclip")), "")
         check("MCP opusclip configurado", line,
               "claude mcp add --transport http opusclip https://mcp.opus.pro/mcp")

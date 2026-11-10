@@ -18,9 +18,10 @@ def run(prompt: str, schema: dict, *, model: str, system: str | None = None,
         allowed_tools: list[str] | None = None, disallowed_tools: list[str] | None = None,
         cwd: str | None = None, timeout: int = 1800) -> tuple[dict, dict]:
     """Devolve (structured_output, info) onde info tem usage/custo/turnos."""
-    if not shutil.which("claude"):
+    exe = shutil.which("claude")  # caminho completo: no Windows pode ser claude.cmd (instalação npm)
+    if not exe:
         raise ClaudeCLIError("Comando `claude` não encontrado no PATH. Instala o Claude Code.")
-    cmd = ["claude", "-p", "--output-format", "json", "--json-schema", json.dumps(schema),
+    cmd = [exe, "-p", "--output-format", "json", "--json-schema", json.dumps(schema),
            "--model", model]
     if system:
         cmd += ["--append-system-prompt", system]

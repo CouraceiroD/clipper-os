@@ -65,6 +65,8 @@ def main():
     fc = bindir / "claude"
     fc.write_text(FAKE_CLAUDE)
     fc.chmod(fc.stat().st_mode | stat.S_IEXEC)
+    if os.name == "nt":  # no Windows o PATH só encontra .cmd/.exe
+        (bindir / "claude.cmd").write_text(f'@"{sys.executable}" "%~dp0claude" %*\n')
     log = tmp / "claude_calls.jsonl"
     analysis = {"video_summary": "x", "clips": [fake_clip(10, 40, 88, "Momento A"), fake_clip(41, 58, 75, "Momento B"),
                                                 fake_clip(0, 9, 30, "Fraco")]}
