@@ -1,45 +1,39 @@
 # Clipper OS — Roadmap
 
-Legenda: ✅ concluído · 🔨 em desenvolvimento · ⏳ pendente
+Legenda: ✅ concluído · 🔨 em desenvolvimento · ⏳ pendente · 🅿️ parado até o milestone atual estar provado
 
-## Fase 1 — MVP local: 1 vídeo → Shorts prontos (🔨)
-- ✅ Download de URL (YouTube, Twitch VOD, Kick… via yt-dlp) ou ficheiro local
+## 🎯 Milestone atual: "dou um VOD e recebo 3 Shorts bons"
+1 VOD real → detetar momentos → máx. 5 candidatos → máx. 3 Shorts por engine → comparar own vs OpusClip.
+
+### Pipeline A — own
+- ✅ Download (yt-dlp: YouTube, Twitch VOD, Kick…) ou ficheiro local
 - ✅ Transcrição local gratuita (faster-whisper, timestamps por palavra)
-- ✅ Análise com Claude: deteção de momentos, scores (hook/emoção/payoff/standalone/viral)
-- ✅ Filtro: score mínimo, duração, sobreposição, histórico (sem duplicados)
-- ✅ Render 9:16 numa passagem FFmpeg: layouts `blur` / `crop` / `split` (facecam + jogo)
-- ✅ Corte de silêncios (o Claude decide por clip se deve cortar)
-- ✅ Legendas dinâmicas palavra a palavra + hook no ecrã nos primeiros 3s
-- ✅ Áudio normalizado (-14 LUFS)
-- ✅ Título, descrição, hashtags, texto de thumbnail por clip + `report.md`
-- ✅ Histórico SQLite
-- ⏳ Primeiro teste real no teu PC com um VOD do streamer escolhido
-- ⏳ Afinar o prompt/score com base nos primeiros resultados
+- ✅ Análise Claude: momentos + scores (hook/emoção/payoff/standalone/viral); backend `claude_code` ou `api`
+- ✅ Filtros: score mínimo, duração, sobreposição, histórico
+- ✅ Render 9:16 numa passagem FFmpeg: layouts `blur` / `crop` / `split`, corte de silêncios, legendas
+  palavra a palavra, hook no ecrã, áudio a -14 LUFS
+- ✅ Metadados: título, descrição com crédito, hashtags, texto de thumbnail
 
-## Fase 2 — Qualidade de edição
-- ⏳ Reframing automático com deteção de cara (MediaPipe) para o layout `crop`
-- ⏳ Zooms/punch-ins nos picos de emoção (volume + palavras-chave)
-- ⏳ Sinal extra: picos de chat (Twitch/YouTube chat replay) e de volume
-- ⏳ Linha de contexto/narrativa (texto ou voz) para mais transformação
-- ⏳ Compilação longa (melhores momentos + transições + capítulos automáticos)
-- ⏳ Thumbnail gerada (frame + texto)
+### Pipeline B — OpusClip (MCP oficial `https://mcp.opus.pro/mcp`, OAuth)
+- ✅ Engine `opusclip` operado pelo Claude Code (`claude -p` + MCP): submit → estado → clips + virality → export → download
+- ✅ Retomável e sem duplicar custos (`state.json` com `project_id`); confirmação antes de gastar créditos
+- ⏳ Login OAuth no PC do utilizador (`/mcp`) e `clipper opusclip-tools` para fixar os nomes reais das tools
 
-## Fase 3 — Publicação no YouTube
-- ⏳ OAuth YouTube Data API + upload como `private`/`unlisted` com metadados
-- ⏳ Pedir auditoria da API à Google (necessário para vídeos poderem ficar públicos)
-- ⏳ Fila de aprovação (aprovar/rejeitar → atualiza histórico)
+### Comparação e custos
+- ✅ `provider: own | opusclip | compare`
+- ✅ `outputs/<vod>/own|opusclip/clip-NN.mp4`, `comparison.json`, `report.md` com tabela de avaliação manual
+- ✅ `costs.json` cumulativo: minutos transcritos, tokens/custo Claude, chamadas externas, créditos OpusClip, tempos
+- ✅ Proteções: `max_vod_minutes`, um VOD por execução, caches em todas as etapas
+- ⏳ Primeiro VOD real em modo `compare` no PC do utilizador
+- ⏳ Avaliação manual dos 6 Shorts e decisão do que melhorar
 
-## Fase 4 — Monitorização automática
-- ⏳ Lista de canais (`channels.yaml`) + deteção de novos vídeos/VODs (RSS YouTube, Twitch Helix)
-- ⏳ Scheduler no PC (Task Scheduler / cron) → pipeline automático
-- ⏳ Vários canais em paralelo, limites de quota
-
-## Fase 5 — Dashboard "Clipper OS"
-- ⏳ Migrar histórico para Supabase
-- ⏳ Dashboard Next.js na Vercel (canais, fila, clips, scores)
-- ⏳ Métricas via YouTube Analytics API (views, CTR, retenção, subs por vídeo)
-- ⏳ Análise de que categorias/hooks funcionam melhor → realimenta o prompt
-
-## Fase 6 — Multi-plataforma e autopiloto
-- ⏳ TikTok (Content Posting API, requer aprovação da app) e Instagram Reels (Graph API, conta Business)
-- ⏳ Publicação 100% automática com regras (score mínimo, horários)
+## Depois do milestone (pela ordem provável)
+- ⏳ Qualidade own: reframing por deteção de cara (MediaPipe), zooms nos picos, picos de chat/volume como sinal
+- ⏳ Vídeo longo de highlights com capítulos
+- 🅿️ Upload YouTube `private` + fila de aprovação. Quota: a YouTube Data API tem um bucket próprio para
+  `videos.insert` (por defeito 100 uploads/dia), separado dos 10 000 unidades/dia das outras chamadas.
+  Confirmar os valores do projeto no Google Cloud Console (IAM & Admin → Quotas). Vídeos de projetos
+  não verificados ficam privados até à auditoria da API.
+- 🅿️ Monitorização automática de canais (RSS YouTube / Twitch Helix) + scheduler
+- 🅿️ Dashboard "Clipper OS" (Supabase + Vercel) e métricas (YouTube Analytics)
+- 🅿️ TikTok, Instagram Reels, autopublicação

@@ -1,33 +1,38 @@
 # Clipper OS — instruções para o Claude Code
 
-Sistema de clipping automático: VOD/vídeo longo → Shorts/Reels/TikToks 9:16 editados.
-O utilizador fala português de Portugal. Responde em pt-PT.
+Sistema de clipping: VOD/vídeo longo → Shorts 9:16. O utilizador fala português de Portugal. Responde em pt-PT.
+
+## Milestone atual (não sair daqui sem o utilizador pedir)
+1 VOD real → até 5 candidatos → até 3 Shorts por engine → comparar `own` vs `opusclip`.
+NÃO trabalhar ainda em: dashboard, Supabase, Vercel, TikTok, Instagram, monitorização automática,
+autopublicação, analytics.
 
 ## Como correr
-- Ambiente: `.venv` na raiz. Ativar: `source .venv/bin/activate` (Windows: `.venv\Scripts\activate`).
-- Pipeline completo: `python -m clipper run "<url ou ficheiro>"`
-  - `--dry-run` só analisa e lista os momentos (barato, sem render)
-  - `--max-clips N`, `--layout blur|crop|split`, `--reanalyze`
-- Re-render depois de editar `data/sources/<pasta>/highlights.json`: `python -m clipper render <pasta>`
-- Histórico: `python -m clipper history`
-- Teste sem rede/API: `python tests/smoke_test.py`
+- Ativar o ambiente: `source .venv/bin/activate` (Windows: `.venv\Scripts\activate`)
+- Diagnóstico: `python -m clipper doctor`
+- Tools do OpusClip (sem créditos): `python -m clipper opusclip-tools`
+- Pipeline: `python -m clipper run "<url>" --provider own|opusclip|compare [--dry-run] [--yes]`
+- Re-render own: `python -m clipper render <vod-id>` (depois de editar `outputs/<vod-id>/own/highlights.json`)
+- Testes (sem rede/API/créditos): `python tests/smoke_test.py && python tests/test_compare_flow.py`
 
 ## Estrutura
-- `clipper/download.py` yt-dlp / ficheiro local → `data/sources/<id>/source.json`
-- `clipper/transcribe.py` faster-whisper → `transcript.json` (cache)
-- `clipper/analyze.py` prompt + JSON schema; backend `api` ou `claude_code` → `analysis_raw.json`, `highlights.json`
-- `clipper/render.py` FFmpeg numa passagem: cortes, silêncios, layout, legendas ASS, loudnorm
-- `clipper/db.py` SQLite `data/clipper.db` (fontes, clips, estado)
-- `config.yaml` (cópia de `config.example.yaml`) — nunca commitar
-- `ROADMAP.md` — manter sempre atualizado (✅ 🔨 ⏳) quando uma tarefa muda de estado
+- `clipper/cli.py` orquestração (submete OpusClip primeiro, corre own em paralelo, depois compara)
+- `clipper/engines/own.py` análise Claude + render FFmpeg → formato comum
+- `clipper/engines/opusclip.py` opera o MCP `opusclip` via `claude -p` (submit/wait/fetch/download, retomável por `state.json`)
+- `clipper/claude_cli.py` wrapper do `claude -p --json-schema`
+- `clipper/analyze.py` prompt + schema dos momentos; `clipper/render.py` FFmpeg (silêncios, layouts, legendas ASS, hook)
+- `clipper/compare.py` comparison.json + report.md; `clipper/costs.py` custos cumulativos por VOD
+- `clipper/db.py` SQLite em `data/clipper.db`; `config.yaml` local (nunca commitar)
+- `ROADMAP.md` — manter atualizado (✅ 🔨 ⏳)
 
-## Regras
-- Nunca publicar vídeos como públicos sem pedido explícito; uploads começam `private`.
-- Respeitar copyright: só clipar canais com autorização; dar sempre crédito ao criador na descrição.
-- Preferir ferramentas gratuitas/locais; avisar antes de adicionar algo pago.
-- Ao alterar `render.py` ou `analyze.py`, correr `python tests/smoke_test.py` antes de commitar.
-- Não commitar `data/`, `config.yaml`, `.env` nem chaves.
+## Regras de custo (obrigatórias)
+- Processar um VOD de cada vez. Nunca correr vários VODs nem `--reanalyze` sem o utilizador pedir.
+- Nunca passar `--yes` (créditos OpusClip) sem confirmação explícita do utilizador nessa conversa.
+- Nunca submeter um segundo projeto OpusClip para o mesmo VOD: o `state.json` guarda o `project_id`.
+- Preferir `--dry-run` para iterar no prompt de análise.
 
-## Rever resultados
-Depois de um `run`, ler `data/sources/<pasta>/report.md`. Para ajustar um clip, editar `start`/`end`/`hook_text`
-no `highlights.json` e correr `render`.
+## Regras gerais
+- Nunca publicar/agendar nada (nem pelo MCP OpusClip). Uploads futuros começam `private`.
+- Respeitar copyright: só clipar canais com autorização; crédito ao criador na descrição.
+- Não commitar `data/`, `outputs/`, vídeos, `config.yaml`, `.env`, cookies, tokens ou credenciais OAuth.
+- Ao alterar código em `clipper/`, correr os dois testes antes de commitar. Commits pequenos e claros.

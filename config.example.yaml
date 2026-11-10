@@ -1,30 +1,41 @@
-# Copia para config.yaml e ajusta. Só precisas de pôr o que queres mudar.
-workdir: ./data
+# Copia para config.yaml (que não vai para o Git) e ajusta.
+workdir: ./data          # cache: downloads, transcrições, histórico
+output_dir: ./outputs    # resultados por VOD
+
+clipping:
+  provider: compare      # own | opusclip | compare (corre os dois e compara)
+  max_candidates: 5      # momentos candidatos por engine
+  max_renders: 3         # Shorts renderizados/exportados por engine
+  max_vod_minutes: 240   # proteção: VODs maiores exigem --force
+
+opusclip:
+  operator_model: claude-opus-5-5   # modelo do `claude -p` que opera o MCP OpusClip
+  poll_seconds: 120                 # intervalo entre verificações de estado (leituras são grátis)
+  max_wait_minutes: 90              # depois disto pára; voltar a correr retoma sem custos
 
 transcribe:
-  model: small          # tiny | base | small | medium | large-v3  (large-v3 se tiveres GPU NVIDIA)
-  device: auto          # auto | cpu | cuda
-  language: null        # null = deteção automática; "pt", "en", ...
+  model: small           # tiny | base | small | medium | large-v3 (large-v3 com GPU NVIDIA)
+  device: auto           # auto | cpu | cuda
+  language: null         # null = automático; "pt", "en", ...
 
 analyze:
-  backend: api          # api (ANTHROPIC_API_KEY) | claude_code (usa a tua subscrição via `claude -p`)
+  backend: claude_code   # claude_code (a tua subscrição, via `claude -p`) | api (ANTHROPIC_API_KEY)
   model: claude-opus-5-5
-  effort: medium        # low | medium | high
-  max_clips: 8
-  min_score: 65         # clips abaixo disto são descartados
+  effort: medium         # low | medium | high
+  min_score: 65
   min_duration: 20
   max_duration: 75
   metadata_language: pt-PT
-  channel_context: ""   # ex: "Streamer PT de FPS, humor ácido, público 16-25"
+  channel_context: ""    # ex: "Streamer PT de FPS, humor ácido, público 16-25"
 
 render:
-  layout: blur          # blur (seguro p/ tudo) | crop (pessoa ao centro) | split (facecam em cima + jogo em baixo)
+  layout: blur           # blur (seguro p/ tudo) | crop (pessoa ao centro) | split (facecam em cima + jogo)
   crop_x: 0.5
-  split:                # frações do vídeo original: [x, y, largura, altura]
+  split:                 # frações do vídeo original: [x, y, largura, altura]
     facecam: [0.0, 0.0, 0.25, 0.25]
     gameplay: [0.125, 0.0, 0.75, 1.0]
     facecam_height: 640
-  silence_gap: 1.0      # corta pausas maiores que 1s (0 desliga)
+  silence_gap: 1.0       # corta pausas > 1s (0 desliga)
   captions: true
   words_per_caption: 3
   font: Arial
