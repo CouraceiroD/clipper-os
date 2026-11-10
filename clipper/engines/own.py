@@ -67,6 +67,9 @@ def render_items(meta: dict, transcript: dict, candidates: list[dict], cfg: dict
             "description": h["description"],
             "hashtags": h["hashtags"],
             "thumbnail_text": h["thumbnail_text"],
+            "editing": (f"layout {cfg['render']['layout']}, legendas palavra a palavra (Whisper), hook no ecrã"
+                        + (", corte de silêncios" if h.get("cut_silences", True) and cfg["render"]["silence_gap"] > 0
+                           else "")),
             "rendered": False,
             "file": None,
             "final_duration": None,

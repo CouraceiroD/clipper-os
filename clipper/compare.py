@@ -12,7 +12,7 @@ def probe(path: str) -> dict:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries",
              "format=duration,size,bit_rate:stream=codec_type,width,height,r_frame_rate",
-             "-of", "json", path], capture_output=True, text=True, check=True).stdout
+             "-of", "json", path], capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout
     except (subprocess.CalledProcessError, FileNotFoundError):
         return {}
     d = json.loads(out)
@@ -43,6 +43,10 @@ def _fmt_t(t) -> str:
     m, s = divmod(int(t), 60)
     h, m = divmod(m, 60)
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
+
+def _cell(v) -> str:
+    return str(v if v is not None else "—").replace("|", "/").replace("\n", " ")
 
 
 def _avg(xs):
@@ -119,6 +123,27 @@ def _report(cmp: dict, results: dict[str, list[dict]]) -> str:
     L += ["", "> Os scores de cada engine usam escalas diferentes (Claude 0-100; OpusClip conforme a API). "
           "Compara a ordenação dentro de cada engine, não os números entre engines.", ""]
 
+    ranks = sorted({c["rank"] for cl in results.values() for c in cl})
+    if ranks:
+        L += ["## Lado a lado", "",
+              "| # | Provider | Início → fim | Duração (final) | Título | Hook | Engagement | Virality | "
+              "Edição | Render (s) | Custo |",
+              "|---|---|---|---|---|---|---|---|---|---|---|"]
+        for r in ranks:
+            for p in provs:
+                c = next((x for x in results[p] if x["rank"] == r), None)
+                if not c:
+                    continue
+                cost = f"{c.get('estimated_cost_usd')} USD"
+                if c.get("estimated_credits") is not None:
+                    cost += f" + {c['estimated_credits']} cr"
+                rendered = "🎬 " if c.get("rendered") else ""
+                L.append(f"| {r} | {p} | {_fmt_t(c.get('start_time'))} → {_fmt_t(c.get('end_time'))} | "
+                         f"{c.get('duration')}s ({c.get('final_duration') or '—'}s) | {rendered}{_cell(c.get('title'))} | "
+                         f"{_cell(c.get('hook'))} | {c.get('engagement_score')} | {c.get('virality_score')} | "
+                         f"{_cell(c.get('editing'))} | {c.get('render_time')} | {cost} |")
+        L += ["", "🎬 = renderizado/exportado. Motivos de seleção em detalhe mais abaixo.", ""]
+
     if cmp["shared_moments"]:
         L += ["## Momentos escolhidos por ambos", ""]
         for o in cmp["shared_moments"]:
@@ -136,6 +161,7 @@ def _report(cmp: dict, results: dict[str, list[dict]]) -> str:
                   f"({c.get('duration')}s → final {c.get('final_duration') or '—'}s)",
                   f"- Virality: **{c.get('virality_score')}** · engagement: {c.get('engagement_score')}",
                   f"- Hook: {c.get('hook')}",
+                  f"- Edição: {c.get('editing')}",
                   f"- Porquê: {c.get('reason_selected')}"]
             if c.get("file"):
                 m = c.get("media", {})
@@ -153,6 +179,24 @@ def _report(cmp: dict, results: dict[str, list[dict]]) -> str:
                  "Legendas (precisão + estilo)", "Reframing / enquadramento", "Qualidade visual final",
                  "Publicaria sem mexer?"]:
         L.append(f"| {crit} | | |")
+    L.append("| **Total** | | |")
+
+    L += ["", "## Vencedor", ""]
+    if len(provs) > 1:
+        speed = {p: s[p].get("processing_seconds") or s[p].get("server_processing_seconds") for p in provs}
+        speed = {p: v for p, v in speed.items() if v}
+        if speed:
+            fastest = min(speed, key=speed.get)
+            L.append(f"- Mais rápido: **{fastest}** ({', '.join(f'{p}: {v}s' for p, v in speed.items())})")
+        L.append(f"- Custo direto: own ≈ {s.get('own', {}).get('claude_cost_usd')} USD de Claude; "
+                 f"opusclip = {s.get('opusclip', {}).get('credits_used')} {s.get('opusclip', {}).get('credits_unit') or 'créditos'}"
+                 f" + {s.get('opusclip', {}).get('claude_cost_usd')} USD de Claude a operar o MCP")
+        if cmp["shared_moments"]:
+            L.append(f"- Concordância: {len(cmp['shared_moments'])} momento(s) escolhido(s) pelos dois")
+        L += ["- **Vencedor em qualidade:** decide-se pela tabela de avaliação manual (maior total).",
+              "- **Vencedor final:** ______  (preenche depois de ver os Shorts)"]
+    else:
+        L.append(f"Só correu um provider ({provs[0] if provs else '—'}). Usa `--provider compare` para comparar.")
 
     c = costs
     L += ["", "## Custos e tempos", "",

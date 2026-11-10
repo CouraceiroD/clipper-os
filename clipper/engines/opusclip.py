@@ -246,13 +246,16 @@ Não submetas novos projetos. Não publiques nem agendes nada.
                 "title": c["title"],
                 "hook": c["hook"],
                 "reason_selected": c["reason_selected"],
-                "engagement_score": round(sum(scores) / len(scores), 1) if scores else None,
+                # sub-scores do OpusClip em 0-10 são convertidos para 0-100 (mesma escala do own)
+                "engagement_score": (round(sum(scores) / len(scores) * (10 if max(scores) <= 10 else 1), 1)
+                                     if scores else None),
                 "virality_score": c["virality_score"],
                 "sub_scores": {k: c[k] for k in ("hook_score", "coherence_score", "connection_score", "trend_score")},
                 "transcript": c["transcript"],
                 "description": c["description"],
                 "hashtags": c["hashtags"],
                 "preview_url": c["preview_url"],
+                "editing": "OpusClip: " + (self.tracker.opusclip.get("options_applied") or "reframe/legendas por defeito"),
                 "rendered": False,
                 "file": None,
                 "final_duration": None,
