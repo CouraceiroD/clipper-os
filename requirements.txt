@@ -1,5 +1,6 @@
 anthropic>=2.7
 faster-whisper>=1.2
+av>=11,<19            # PyAV 19 removeu open(metadata_errors=...), usado pelo faster-whisper 1.2.1
 yt-dlp[default]>=2026.10.26   # [default] inclui yt-dlp-ejs (necessário para o YouTube)
 pyyaml>=6
 # GPU NVIDIA (opcional): pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"
