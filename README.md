@@ -1,22 +1,43 @@
 # Clipper OS
 
-Transforma lives e vídeos longos em Shorts / Reels / TikToks verticais, com o Claude como "cérebro".
-Tem dois engines de clipping que podem correr lado a lado para comparar resultados:
+Dás uma live ou VOD → recebes 3 Shorts verticais finalizados (9:16, hook, legendas, áudio normalizado).
+Tudo corre no teu PC com o Claude Code que já tens. Sem serviços pagos adicionais, sem uploads.
 
 ```
-                       ┌─ A · own ──────► yt-dlp ► faster-whisper ► Claude (momentos + score) ► FFmpeg 9:16
-VOD (URL) ─► clipper ──┤
-                       └─ B · opusclip ─► Claude Code ► MCP OpusClip (submit ► estado ► clips + virality ► export)
-                                                     │
-                     outputs/<vod>/ own/ · opusclip/ · comparison.json · report.md · costs.json
+URL ─► yt-dlp ─► faster-whisper (local) ─► Claude escolhe os momentos mais virais ─► FFmpeg
+        └─► outputs/<vod-id>/clip-01.mp4 · clip-02.mp4 · clip-03.mp4 · report.md
 ```
 
-**Objetivo atual:** 1 VOD → até 5 candidatos → até 3 Shorts por engine → comparar own vs OpusClip.
-Nada é publicado nem carregado para nenhuma plataforma.
+## Como usar
 
-## Instalação no Windows 11 (PowerShell)
+Abre o Claude Code na pasta do projeto e escreve:
 
-Uma vez só (depois fecha e reabre o PowerShell para o PATH atualizar):
+> Clip this live: https://www.twitch.tv/videos/1234567890. Find the moments with the highest viral potential and create the finished Shorts.
+
+O Claude reconhece o pedido (skill `clip`), corre o pipeline e no fim mostra os 3 Shorts e porque foi
+escolhido cada momento. Também funciona com "make the best 3 shorts from this stream", "find the most viral
+moments", "clip the best moments from <streamer>" ou "faz clips desta live".
+
+Ou diretamente no terminal:
+
+```powershell
+.\.venv\Scripts\python.exe -m clipper auto "URL_DA_LIVE"
+```
+
+Opções: `--clips 5`, `--lang en`, `--layout split` (facecam em cima + jogo em baixo), `--reanalyze`.
+
+## O que o sistema faz
+
+- Escolhe os 3 momentos com mais potencial viral: emoção, surpresa, conflito, humor, reações fortes,
+  jogadas impressionantes, frases inesperadas e momentos que funcionam isolados.
+- Evita intros, momentos sem contexto, silêncios e clips repetidos (histórico em `data/clipper.db`).
+- Lives longas são analisadas por partes. Download, transcrição e análise ficam em cache.
+- `report.md` explica porque cada momento foi escolhido, com hook, link para o momento na fonte, título,
+  descrição, hashtags, texto para thumbnail e os momentos rejeitados.
+
+## Instalação no Windows 11 (uma vez)
+
+PowerShell, uma linha de cada vez (fecha e reabre o PowerShell no fim):
 
 ```powershell
 winget install -e --id Python.Python.3.12
@@ -26,80 +47,38 @@ winget install -e --id DenoLand.Deno
 irm https://claude.ai/install.ps1 | iex
 ```
 
-O Deno é usado pelo yt-dlp para o YouTube. O último comando instala o Claude Code (`claude.exe`).
-Se já tens o Claude Code via npm (`claude.cmd`) também funciona.
-
 Projeto:
 
 ```powershell
 git clone https://github.com/CouraceiroD/clipper-os.git
 cd clipper-os
 py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 Copy-Item config.example.yaml config.yaml
+.\.venv\Scripts\python.exe -m clipper doctor
 ```
 
-Se o `Activate.ps1` for bloqueado: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` e repete.
-
-### GPU NVIDIA (opcional)
+GPU NVIDIA (opcional, transcrição muito mais rápida):
 
 ```powershell
-nvidia-smi
-pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"
+.\.venv\Scripts\python.exe -m pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"
 ```
 
-Escolhe o modelo no `config.yaml` (secção `transcribe`) pela VRAM: ver a tabela em `CLAUDE.md`.
-Sem GPU: `model: small`, `device: cpu`, `compute_type: int8`. Se a GPU falhar, o sistema cai para CPU sozinho.
+Depois ajusta `transcribe` no `config.yaml` pela tabela de VRAM em `CLAUDE.md`.
+Se a GPU falhar, o sistema usa CPU automaticamente.
 
-### Ligar o OpusClip (MCP oficial, OAuth)
-
-Na pasta do projeto:
+## Testes (sem rede, sem custos)
 
 ```powershell
-claude mcp add --transport http opusclip https://mcp.opus.pro/mcp
-claude
+.\.venv\Scripts\python.exe tests/test_windows_compat.py
+.\.venv\Scripts\python.exe tests/smoke_test.py
+.\.venv\Scripts\python.exe tests/test_auto_flow.py
+.\.venv\Scripts\python.exe tests/test_compare_flow.py
 ```
 
-Dentro do Claude Code: `/mcp` → **opusclip** → login no browser → sai com `/exit`.
-O token fica guardado pelo Claude Code fora do repositório.
+## Opcional: comparar com o OpusClip
 
-### Verificar
+Não é necessário para o fluxo normal. Só se quiseres comparar resultados (gasta créditos OpusClip e pede
+confirmação): ver `docs/OPUSCLIP_VALIDATION.md` e `python -m clipper run "<URL>" --provider compare`.
 
-```powershell
-python tests/test_windows_compat.py
-python tests/smoke_test.py
-python tests/test_compare_flow.py
-python -m clipper doctor
-python -m clipper opusclip-tools
-```
-
-`opusclip-tools` não gasta créditos: grava as tools e o saldo em `docs/opusclip_tools.md`.
-Depois segue `docs/OPUSCLIP_VALIDATION.md`.
-
-## Uso (um VOD de cada vez)
-
-```powershell
-python -m clipper run "URL_DO_VOD" --provider own --dry-run   # só lista os momentos
-python -m clipper run "URL_DO_VOD" --provider compare         # own + OpusClip + relatório
-python -m clipper render <vod-id>                             # re-render own após editar highlights.json
-```
-
-- O OpusClip pede confirmação antes de gastar créditos (`--yes` confirma sem pergunta).
-- Tudo é retomável e em cache: download, transcrição, análise e o projeto OpusClip já submetido.
-  Voltar a correr o mesmo comando nunca paga duas vezes.
-- Limites: `max_candidates: 5`, `max_renders: 3`, `max_vod_minutes: 240` (no `config.yaml`).
-
-## Resultados
-
-```
-outputs/<vod-id>/
-  own/        clip-01.mp4 … clip-03.mp4 + clip-NN.json + highlights.json (editável)
-  opusclip/   clip-01.mp4 … clip-03.mp4 + clip-NN.json + state.json (project_id)
-  comparison.json   todos os clips em formato comum + resumo + momentos partilhados
-  report.md         lado a lado, detalhe, avaliação manual, vencedor, custos
-  costs.json        minutos transcritos, tokens/custo Claude, chamadas, créditos OpusClip, tempos (cumulativo)
-```
-
-Estado do projeto: ver [ROADMAP.md](ROADMAP.md).
+Estado do projeto: [ROADMAP.md](ROADMAP.md).

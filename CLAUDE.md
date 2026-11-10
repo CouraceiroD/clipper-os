@@ -1,23 +1,46 @@
 # Clipper OS — instruções para o Claude Code
 
-Sistema de clipping: VOD/vídeo longo → Shorts 9:16. O utilizador fala português de Portugal. Responde em pt-PT.
+Transforma lives e VODs em Shorts verticais finalizados, localmente. O utilizador fala português de Portugal
+(responde em pt-PT) e usa Windows 11.
 
-## Milestone atual (não sair daqui sem o utilizador pedir)
-1 VOD real → até 5 candidatos → até 3 Shorts por engine → comparar `own` vs `opusclip`.
-NÃO trabalhar ainda em: dashboard, Supabase, Vercel, TikTok, Instagram, monitorização automática,
-autopublicação, analytics.
+## Fluxo principal (o que o utilizador vai pedir)
 
-## Como correr
-- Ativar o ambiente: `source .venv/bin/activate` (Windows: `.venv\Scripts\activate`)
+Quando o utilizador pedir clips/Shorts de uma live, stream, VOD ou vídeo — por exemplo
+"clip this live: <URL>", "make the best 3 shorts from this stream", "find the most viral moments",
+"clip the best moments from X", "make shorts from this VOD", "faz clips desta live" —
+**usa a skill `clip` (`.claude/skills/clip/SKILL.md`)**. Resumo:
+
+```
+<python do .venv> -m clipper auto "<URL>"        # em background; demora 10 min a 1 h+
+```
+
+- Python do venv: Windows `.venv/Scripts/python.exe`, Linux/macOS `.venv/bin/python`.
+- Opções só se pedidas: `--clips N`, `--lang en`, `--layout split|crop|blur`, `--reanalyze`.
+- No fim lê `outputs/<vod-id>/report.md` e responde com os ficheiros, títulos, scores, hooks e porquê.
+- Resultado: `outputs/<vod-id>/clip-01.mp4`, `clip-02.mp4`, `clip-03.mp4`, `report.md`.
+- Tudo local: yt-dlp, faster-whisper, FFmpeg e o Claude Code do utilizador (`claude -p`). Sem serviços pagos extra.
+
+## Regras
+
+- Nunca publicar, agendar nem fazer upload de nada.
+- OpusClip é **opcional** e só para comparação: nunca o usar sem o utilizador pedir explicitamente
+  (`python -m clipper run "<url>" --provider compare`, gasta créditos e pede confirmação).
+- Um VOD de cada vez. Não repetir análises (`--reanalyze`) nem processar VODs extra sem pedido.
+- Respeitar copyright: só clipar criadores que o permitem; a descrição já dá crédito ao canal.
+- Não commitar `data/`, `outputs/`, vídeos, `config.yaml`, `.env`, cookies, tokens ou credenciais.
+- Não trabalhar em dashboard, Supabase, Vercel, uploads, TikTok/Instagram ou monitorização sem pedido.
+
+## Outros comandos
+
 - Diagnóstico: `python -m clipper doctor`
-- Tools do OpusClip (sem créditos): `python -m clipper opusclip-tools`
-- Pipeline: `python -m clipper run "<url>" --provider own|opusclip|compare [--dry-run] [--yes]`
-- Re-render own: `python -m clipper render <vod-id>` (depois de editar `outputs/<vod-id>/own/highlights.json`)
-- Testes (sem rede/API/créditos): `python tests/test_windows_compat.py`, `python tests/smoke_test.py`, `python tests/test_compare_flow.py`
-- Validação OpusClip depois do OAuth: `docs/OPUSCLIP_VALIDATION.md`
-- Utilizador em Windows 11 / PowerShell: comandos para ele em PowerShell (ver README)
+- Re-render manual (comando `run`): `python -m clipper render <vod-id>`
+- Comparação opcional com OpusClip: `python -m clipper opusclip-tools`, `python -m clipper run "<url>" --provider compare`
+- Testes (sem rede/API/créditos):
+  `python tests/test_windows_compat.py`, `python tests/smoke_test.py`, `python tests/test_auto_flow.py`,
+  `python tests/test_compare_flow.py` — correr todos antes de commitar alterações em `clipper/`.
 
 ## Escolha do modelo Whisper (`transcribe` no config.yaml)
+
 Verificar a GPU com `nvidia-smi`. Não escolher um modelo acima do que a VRAM aguenta.
 
 | Hardware | model | device | compute_type |
@@ -28,28 +51,15 @@ Verificar a GPU com `nvidia-smi`. Não escolher um modelo acima do que a VRAM ag
 | NVIDIA 6–8 GB | large-v3-turbo | cuda | int8_float16 |
 | NVIDIA ≥ 8 GB | large-v3-turbo | cuda | float16 |
 
-Para CUDA o faster-whisper precisa de cuBLAS 12 e cuDNN 9 (`pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"`).
-Se der erro de DLL/biblioteca CUDA em falta e não se resolver sem instalar software pago, voltar a `cpu` e avisar.
-Validar com uma transcrição curta (ex.: 10 s de áudio gerado com FFmpeg), nunca com um VOD.
+CUDA precisa de `pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"`. Se a GPU falhar, o sistema cai
+sozinho para CPU.
 
 ## Estrutura
-- `clipper/cli.py` orquestração (submete OpusClip primeiro, corre own em paralelo, depois compara)
-- `clipper/engines/own.py` análise Claude + render FFmpeg → formato comum
-- `clipper/engines/opusclip.py` opera o MCP `opusclip` via `claude -p` (submit/wait/fetch/download, retomável por `state.json`)
-- `clipper/claude_cli.py` wrapper do `claude -p --json-schema`
-- `clipper/analyze.py` prompt + schema dos momentos; `clipper/render.py` FFmpeg (silêncios, layouts, legendas ASS, hook)
-- `clipper/compare.py` comparison.json + report.md; `clipper/costs.py` custos cumulativos por VOD
-- `clipper/db.py` SQLite em `data/clipper.db`; `config.yaml` local (nunca commitar)
-- `ROADMAP.md` — manter atualizado (✅ 🔨 ⏳)
 
-## Regras de custo (obrigatórias)
-- Processar um VOD de cada vez. Nunca correr vários VODs nem `--reanalyze` sem o utilizador pedir.
-- Nunca passar `--yes` (créditos OpusClip) sem confirmação explícita do utilizador nessa conversa.
-- Nunca submeter um segundo projeto OpusClip para o mesmo VOD: o `state.json` guarda o `project_id`.
-- Preferir `--dry-run` para iterar no prompt de análise.
-
-## Regras gerais
-- Nunca publicar/agendar nada (nem pelo MCP OpusClip). Uploads futuros começam `private`.
-- Respeitar copyright: só clipar canais com autorização; crédito ao criador na descrição.
-- Não commitar `data/`, `outputs/`, vídeos, `config.yaml`, `.env`, cookies, tokens ou credenciais OAuth.
-- Ao alterar código em `clipper/`, correr os três testes antes de commitar. Commits pequenos e claros.
+- `clipper/auto.py` modo automático (fluxo principal) + `report.md`
+- `clipper/analyze.py` prompt de seleção viral, schema, análise por partes em lives longas, seleção
+- `clipper/render.py` FFmpeg numa passagem: cortes, silêncios, 9:16 (blur/crop/split), hook, legendas, loudnorm
+- `clipper/transcribe.py` faster-whisper com fallback CPU; `clipper/download.py` yt-dlp
+- `clipper/claude_cli.py` `claude -p --json-schema` (compatível com claude.exe/claude.cmd)
+- `clipper/cli.py` comandos; `clipper/db.py` histórico SQLite (evita clips repetidos)
+- Opcional (comparação): `clipper/engines/`, `clipper/compare.py`, `clipper/costs.py`, `docs/OPUSCLIP_VALIDATION.md`
