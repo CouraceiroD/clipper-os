@@ -1,6 +1,7 @@
 """CLI do Clipper OS.
 
-  python -m clipper doctor                          verifica dependências e o MCP do OpusClip
+  python -m clipper auto <url>                      live/VOD -> 3 Shorts finalizados (fluxo principal)
+  python -m clipper doctor                          verifica dependências
   python -m clipper opusclip-tools                  lista as tools do MCP OpusClip (sem gastar créditos)
   python -m clipper run <url|ficheiro>              corre o provider do config (own | opusclip | compare)
         [--provider compare] [--yes] [--dry-run] [--reanalyze] [--force]
@@ -36,6 +37,17 @@ def _confirm(msg: str, yes: bool) -> bool:
         print(f"{msg}\n-> sem terminal interativo: usa --yes para confirmar.")
         return False
     return input(f"{msg} [s/N] ").strip().lower() in ("s", "sim", "y", "yes")
+
+
+# ------------------------------------------------------------------ auto
+def cmd_auto(args, cfg) -> None:
+    from . import auto
+
+    if args.layout:
+        cfg["render"]["layout"] = args.layout
+    if args.lang:
+        cfg["analyze"]["metadata_language"] = args.lang
+    auto.run(args.source, cfg, n_clips=args.clips, reanalyze=args.reanalyze, force=args.force)
 
 
 # ------------------------------------------------------------------ run
@@ -208,11 +220,16 @@ def cmd_doctor(args, cfg) -> None:
     check("Claude Code (claude)", base, MCP_HINTS["no_claude"])
     if base:
         print(f"ℹ️  claude: {' '.join(base)}")
+        need_opus = cfg["clipping"]["provider"] != "own"
         status, line = mcp_status("opusclip")
-        check("MCP opusclip configurado", status != "missing", MCP_HINTS["missing"])
-        if status != "missing":
-            check(f"MCP opusclip ligado ({line})", status == "connected", MCP_HINTS.get(status, ""),
-                  required=cfg["clipping"]["provider"] != "own")
+        if status == "missing" and not need_opus:
+            print("ℹ️  OpusClip (opcional, só para comparação): não configurado")
+        else:
+            check("MCP opusclip configurado (opcional)", status != "missing", MCP_HINTS["missing"],
+                  required=need_opus)
+            if status != "missing":
+                check(f"MCP opusclip ligado ({line})", status == "connected", MCP_HINTS.get(status, ""),
+                      required=need_opus)
     print("\nTudo pronto." if ok else "\nCorrige os ❌ acima.")
     if not ok:
         sys.exit(1)
@@ -261,6 +278,15 @@ def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="clipper")
     p.add_argument("--config", default=None)
     sub = p.add_subparsers(dest="cmd", required=True)
+
+    au = sub.add_parser("auto", help="live/VOD -> 3 Shorts finalizados (local, sem serviços pagos)")
+    au.add_argument("source", help="URL da live/VOD (YouTube, Twitch, Kick...) ou ficheiro de vídeo")
+    au.add_argument("--clips", type=int, default=3, help="número de Shorts (por defeito 3)")
+    au.add_argument("--layout", choices=["blur", "crop", "split"])
+    au.add_argument("--lang", help="idioma dos hooks/títulos, ex: pt-PT, en")
+    au.add_argument("--reanalyze", action="store_true", help="repete a análise do Claude (ignora cache)")
+    au.add_argument("--force", action="store_true", help="ignora o limite max_vod_minutes")
+    au.set_defaults(fn=cmd_auto)
 
     r = sub.add_parser("run", help="processa UM VOD (URL ou ficheiro)")
     r.add_argument("source")

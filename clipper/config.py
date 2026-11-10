@@ -13,7 +13,7 @@ DEFAULTS: dict = {
         "provider": "own",         # own | opusclip | compare
         "max_candidates": 5,
         "max_renders": 3,
-        "max_vod_minutes": 240,    # proteção de custos: recusa VODs maiores sem --force
+        "max_vod_minutes": 720,    # proteção: recusa vídeos maiores (12 h) sem --force
     },
     "opusclip": {
         "operator_model": "claude-opus-5-5",  # modelo do `claude -p` que opera o MCP
