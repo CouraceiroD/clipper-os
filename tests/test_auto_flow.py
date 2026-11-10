@@ -33,10 +33,10 @@ def main():
         (bindir / "claude.cmd").write_text(f'@"{sys.executable}" "%~dp0claude" %*\n')
     log = tmp / "claude_calls.jsonl"
     analysis = {"video_summary": "Live de teste.", "clips": [
-        fake_clip(15, 30, 88, "Reação épica"),
-        fake_clip(31, 45, 75, "Discussão com o chat"),
-        fake_clip(2, 14, 55, "Momento médio"),        # abaixo de 65: só entra para completar 3
-        fake_clip(46, 58, 30, "Intro aborrecida"),    # rejeitado (score < 50)
+        fake_clip(15, 30, 88, "Epic reaction"),
+        fake_clip(31, 45, 75, "Arguing with chat"),
+        fake_clip(2, 14, 55, "Average moment"),       # abaixo de 65: só entra para completar 3
+        fake_clip(46, 58, 30, "Boring intro"),        # rejeitado (score < 50)
     ]}
     os.environ.update(PATH=f"{bindir}{os.pathsep}{os.environ['PATH']}", FAKE_CLAUDE_LOG=str(log),
                       FAKE_OPUS_MP4=str(video), FAKE_ANALYSIS=json.dumps(analysis),
@@ -60,7 +60,7 @@ render: {{font: Inter}}
     auto_mod.probe_meta = lambda s: {k: v for k, v in meta.items() if k != "video_path"}
     auto_mod.fetch = lambda s, cfg: meta
     cfg = load_config(str(cfgp))
-    assert cfg["analyze"]["metadata_language"] == "en", "textos públicos em inglês por defeito"
+    assert cfg["output_language"] == "en", "textos públicos em inglês por defeito"
     (source_dir(cfg["workdir"], meta["source_id"]) / "transcript.json").write_text(
         json.dumps(fake_transcript()), encoding="utf-8")
     analyze.MAX_CHARS_PER_CALL = 300   # força a análise por partes (como numa live longa)
@@ -77,8 +77,8 @@ render: {{font: Inter}}
         assert size == "1080x1920", (f, size)
     rep = (out / "report.md").read_text(encoding="utf-8")
     assert rep.count("**Porque foi escolhido:**") == 3
-    assert "Reação épica" in rep.split("### clip-01.mp4")[1].split("###")[0], "clip-01 deve ser o de score mais alto"
-    assert "⚠ Abaixo do limiar" in rep and "Intro aborrecida" in rep.split("rejeitados")[1]
+    assert "Epic reaction" in rep.split("### clip-01.mp4")[1].split("###")[0], "clip-01 deve ser o de score mais alto"
+    assert "⚠ Abaixo do limiar" in rep and "Boring intro" in rep.split("rejeitados")[1]
     assert "&t=15s" in rep or "&t=14s" in rep, "link para o momento na fonte"
 
     calls = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()]
@@ -102,11 +102,11 @@ render: {{font: Inter}}
     assert sorted(p.name for p in out.iterdir()) == ["clip-01.mp4", "clip-02.mp4", "clip-03.mp4", "en", "report.md"]
     rep2 = (out / "report.md").read_text(encoding="utf-8")
     assert [l for l in rep2.splitlines() if l.startswith("- Momento original")] == starts, "momentos mudaram"
-    assert rep2.count("Localized hook") == 3 and "Reação épica" not in rep2 and "textos em `pt-PT`" in rep2
-    assert "Reação épica" in (out / "en" / "report.md").read_text(encoding="utf-8")
+    assert rep2.count("Localized hook") == 3 and "Epic reaction" not in rep2 and "textos em `pt-PT`" in rep2
+    assert "Epic reaction" in (out / "en" / "report.md").read_text(encoding="utf-8")
     cache = source_dir(cfg["workdir"], meta["source_id"])
     assert (cache / "analysis.en.json").exists()
-    assert json.loads((cache / "analysis.json").read_text(encoding="utf-8"))["metadata_language"] == "pt-PT"
+    assert json.loads((cache / "analysis.json").read_text(encoding="utf-8"))["output_language"] == "pt-PT"
 
     print("OK auto flow:", out)
     if "--keep" not in sys.argv:

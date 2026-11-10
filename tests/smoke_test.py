@@ -49,11 +49,11 @@ def fake_transcript(seconds: int = 60) -> dict:
 
 
 def fake_clip(start, end, score, title):
-    return {"start": start, "end": end, "title": title, "hook_text": "Ele não esperava isto",
+    return {"start": start, "end": end, "title": title, "hook_text": "He did not see this coming",
             "summary": "s", "why_viral": "w", "category": "funny", "hook_score": 8,
             "emotion_score": 8, "payoff_score": 8, "standalone_score": 8, "viral_score": score,
             "cut_silences": True, "description": "d", "hashtags": ["gaming", "clips"],
-            "thumbnail_text": "NÃO ACREDITO"}
+            "thumbnail_text": "NO WAY"}
 
 
 def main():

@@ -16,8 +16,9 @@ Quando o utilizador pedir clips/Shorts de uma live, stream, VOD ou vídeo — po
 
 - Python do venv: Windows `.venv/Scripts/python.exe`, Linux/macOS `.venv/bin/python`.
 - Opções só se pedidas: `--clips N`, `--lang pt-PT`, `--layout split|crop|blur`, `--reanalyze`.
-- Textos públicos (título, hook, descrição, hashtags, thumbnail) em inglês por defeito; legendas com as palavras
-  faladas (tradução para inglês só com `transcribe.translate_captions: true`).
+- Texto público (título, hook, descrição, hashtags, thumbnail, texto no vídeo) no idioma de `output_language`
+  (config.yaml, por defeito `en`), validado em código. Legendas com as palavras faladas (tradução para inglês
+  só com `transcribe.translate_captions: true`).
 - No fim lê `outputs/<vod-id>/report.md` e responde com os ficheiros, títulos, scores, hooks e porquê.
 - Resultado: `outputs/<vod-id>/clip-01.mp4`, `clip-02.mp4`, `clip-03.mp4`, `report.md`.
 - Tudo local: yt-dlp, faster-whisper, FFmpeg e o Claude Code do utilizador (`claude -p`). Sem serviços pagos extra.
@@ -39,7 +40,7 @@ Quando o utilizador pedir clips/Shorts de uma live, stream, VOD ou vídeo — po
 - Comparação opcional com OpusClip: `python -m clipper opusclip-tools`, `python -m clipper run "<url>" --provider compare`
 - Testes (sem rede/API/créditos):
   `python tests/test_windows_compat.py`, `python tests/smoke_test.py`, `python tests/test_auto_flow.py`,
-  `python tests/test_compare_flow.py` — correr todos antes de commitar alterações em `clipper/`.
+  `python tests/test_compare_flow.py`, `python tests/test_language.py` — correr todos antes de commitar alterações em `clipper/`.
 
 ## Escolha do modelo Whisper (`transcribe` no config.yaml)
 

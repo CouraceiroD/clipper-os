@@ -83,21 +83,23 @@ def run(source: str, cfg: dict, n_clips: int = 3, reanalyze: bool = False, force
 
     print("[4/5] Claude a escolher os momentos com mais potencial viral")
     raw_path = cache / "analysis.json"
+    lang = cfg["output_language"]
     archive_lang = None
     with tracker.stage("analyze"):
         if raw_path.exists() and not reanalyze:
             print("      (análise em cache; --reanalyze para repetir)")
             raw = json.loads(raw_path.read_text(encoding="utf-8"))
-            old_lang = raw.get("metadata_language", an.LEGACY_LANGUAGE)
-            if old_lang != a["metadata_language"]:
-                # mesmos momentos e scores; só os textos mudam de idioma. A versão anterior fica guardada.
+            old_lang = an.text_language(raw)
+            if old_lang != lang:
+                # textos da cache noutro idioma: não são reutilizados. Mesmos momentos e scores, textos regenerados;
+                # a versão anterior fica guardada.
                 shutil.copyfile(raw_path, cache / f"analysis.{safe_id(old_lang)}.json")
-                raw = an.localize(raw, transcript, meta, cfg, tracker)
-                raw_path.write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
                 archive_lang = old_lang
         else:
             raw = an.analyze(transcript, meta, cfg, tracker)
-            raw_path.write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
+        # valida sempre (cache incluída): português com output_language=en é regenerado ou a execução pára
+        raw = an.ensure_language(raw, transcript, meta, cfg, tracker)
+        raw_path.write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
     db.reset_source(meta["source_id"])
     rejected: list[dict] = []
     chosen = an.select(copy.deepcopy(raw), transcript, cfg, db, meta["source_id"],
@@ -110,16 +112,19 @@ def run(source: str, cfg: dict, n_clips: int = 3, reanalyze: bool = False, force
     print("[5/5] a montar os Shorts (FFmpeg)")
     out = Path(cfg["output_dir"]) / safe_id(meta["source_id"])
     out.mkdir(parents=True, exist_ok=True)
-    if archive_lang:   # Shorts anteriores noutro idioma: guardados em <out>/<idioma>/ em vez de apagados
+    previous = [*out.glob("clip-*.mp4"), *out.glob("report.md")]
+    if archive_lang and previous:   # Shorts anteriores noutro idioma: guardados em <out>/<idioma>/, não apagados
         keep = out / safe_id(archive_lang)
         keep.mkdir(exist_ok=True)
-        for old in [*out.glob("clip-*.mp4"), *out.glob("report.md")]:
+        for old in previous:
             shutil.move(str(old), keep / old.name)
         print(f"      versão anterior ({archive_lang}) guardada em {keep}")
     for old in out.glob("clip-*.mp4"):
         old.unlink()
     words = all_words(transcript)
     cap_words = all_words(captions) if captions else None
+    for h in chosen:   # última barreira antes de queimar texto no vídeo
+        an.check_public_language(h, cfg)
     for i, h in enumerate(chosen, 1):
         t = time.time()
         with tracker.stage("render"):
@@ -154,7 +159,7 @@ def report(meta: dict, chosen: list[dict], rejected: list[dict], raw: dict, cost
          f"- Fonte: {url}",
          f"- Canal: {meta.get('channel')} · duração {_fmt(meta.get('duration'))}",
          f"- Gerado: {datetime.now().strftime('%Y-%m-%d %H:%M')} · layout `{cfg['render']['layout']}` · "
-         f"Whisper `{cfg['transcribe']['model']}` · textos em `{raw.get('metadata_language', an.LEGACY_LANGUAGE)}`", ""]
+         f"Whisper `{cfg['transcribe']['model']}` · textos em `{an.text_language(raw)}`", ""]
     if raw.get("video_summary"):
         L += ["## Resumo do vídeo", "", raw["video_summary"], ""]
 

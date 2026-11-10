@@ -26,7 +26,10 @@ Ou diretamente no terminal:
 
 Opções: `--clips 5`, `--lang pt-PT`, `--layout split` (facecam em cima + jogo em baixo), `--reanalyze`.
 
-Títulos, hooks, descrições, hashtags, thumbnails e resumos saem em inglês (`analyze.metadata_language: en`).
+Todo o texto público (títulos, hooks, descrições, hashtags, thumbnails, texto no vídeo) sai no idioma de
+`output_language` no `config.yaml` (por defeito `en`). Nunca é deduzido do Windows, do locale nem da conversa.
+Com `en`, o código verifica a resposta do Claude: se encontrar português, pede de novo em inglês e, se
+continuar, pára sem renderizar.
 As legendas mantêm as palavras faladas; fala noutra língua só é traduzida para inglês com
 `transcribe.translate_captions: true`. Mudar o idioma de um VOD já analisado traduz só os textos (mesmos
 momentos) e guarda a versão anterior em `outputs/<vod-id>/<idioma>/`.

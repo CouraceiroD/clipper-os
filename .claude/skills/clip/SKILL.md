@@ -29,7 +29,7 @@ Reply to the user in European Portuguese (pt-PT) unless they write in another la
 
 3. **Map the request to options** (defaults are good; only add what the user asked for):
    - number of shorts ("make 5 shorts") → `--clips 5` (default 3)
-   - language of hooks/titles ("in Portuguese") → `--lang pt-PT` (default from `config.yaml`, `en`).
+   - language of hooks/titles ("in Portuguese") → `--lang pt-PT` (default: `output_language` in `config.yaml`, `en`).
      Changing the language of an already analysed VOD only translates the texts (same moments) and keeps the
      previous version in `outputs/<vod-id>/<lang>/`.
    - facecam on top + gameplay below → `--layout split`; person centred → `--layout crop`

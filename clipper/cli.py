@@ -46,7 +46,7 @@ def cmd_auto(args, cfg) -> None:
     if args.layout:
         cfg["render"]["layout"] = args.layout
     if args.lang:
-        cfg["analyze"]["metadata_language"] = args.lang
+        cfg["output_language"] = args.lang
     auto.run(args.source, cfg, n_clips=args.clips, reanalyze=args.reanalyze, force=args.force)
 
 
@@ -158,11 +158,16 @@ def cmd_render(args, cfg) -> None:
         sys.exit("Não encontrei o download/transcrição em data/sources/ para este VOD.")
     meta = json.loads((src / "source.json").read_text(encoding="utf-8"))
     transcript = json.loads((src / "transcript.json").read_text(encoding="utf-8"))
+    from . import analyze as an
+    cands = json.loads(hl.read_text(encoding="utf-8"))   # editado à mão: valida o idioma antes de renderizar
+    fixed = an.ensure_language({"video_summary": "", "clips": cands, "output_language": cfg["output_language"]},
+                               transcript, meta, cfg)["clips"]
+    if fixed != cands:
+        hl.write_text(json.dumps(fixed, indent=2, ensure_ascii=False), encoding="utf-8")
     db = DB(cfg["workdir"])
     db.reset_source(meta["source_id"])
     tracker = CostTracker()
-    items = own.render_items(meta, transcript, json.loads(hl.read_text(encoding="utf-8")), cfg, db, tracker,
-                             out / "own")
+    items = own.render_items(meta, transcript, fixed, cfg, db, tracker, out / "own")
     print(f"✅ {sum(i['rendered'] for i in items)} clip(s) re-renderizados em {out / 'own'}")
 
 
@@ -283,7 +288,7 @@ def main(argv=None) -> None:
     au.add_argument("source", help="URL da live/VOD (YouTube, Twitch, Kick...) ou ficheiro de vídeo")
     au.add_argument("--clips", type=int, default=3, help="número de Shorts (por defeito 3)")
     au.add_argument("--layout", choices=["blur", "crop", "split"])
-    au.add_argument("--lang", help="idioma dos hooks/títulos, ex: pt-PT, en")
+    au.add_argument("--lang", help="substitui output_language nesta execução, ex: en, pt-PT")
     au.add_argument("--reanalyze", action="store_true", help="repete a análise do Claude (ignora cache)")
     au.add_argument("--force", action="store_true", help="ignora o limite max_vod_minutes")
     au.set_defaults(fn=cmd_auto)

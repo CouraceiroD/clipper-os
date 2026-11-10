@@ -1,4 +1,8 @@
 # Copia para config.yaml (que não vai para o Git) e ajusta.
+# Idioma de TODO o texto público: título, hook, descrição, hashtags, thumbnail e texto no vídeo.
+# Único sítio onde se escolhe; nunca é deduzido do Windows, do locale nem da conversa.
+output_language: en
+
 workdir: ./data          # cache: downloads, transcrições, histórico
 output_dir: ./outputs    # resultados por VOD
 
@@ -30,7 +34,6 @@ analyze:
   min_score: 65
   min_duration: 20
   max_duration: 75
-  metadata_language: en   # título, hook, descrição, hashtags, thumbnail e resumos (ex: en, pt-PT)
   channel_context: ""    # ex: "Streamer PT de FPS, humor ácido, público 16-25"
 
 render:

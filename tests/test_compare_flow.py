@@ -39,9 +39,15 @@ mp4 = os.environ["FAKE_OPUS_MP4"]
 if "localized" in props:   # tradução dos textos de uma análise em cache: devolve os mesmos índices
     import re
     idx = sorted({int(i) for i in re.findall(r'"index": (\d+)', prompt)})
-    out = {"video_summary": "Localized summary.", "localized": [
-        {"index": i, "title": f"Localized {i}", "hook_text": "Localized hook", "summary": "s", "why_viral": "w",
-         "description": "d", "hashtags": ["clips"], "thumbnail_text": "LOCALIZED"} for i in idx]}
+    if os.environ.get("FAKE_LOCALIZE_PT"):   # modelo teimoso: continua a responder em português
+        out = {"video_summary": "x", "localized": [
+            {"index": i, "title": "Não acredito no que ele disse", "hook_text": "DISSERAM-LHE ISTO... EM PLENO DIRETO",
+             "summary": "s", "why_viral": "w", "description": "d", "hashtags": ["clips"],
+             "thumbnail_text": "NÃO TIREM PRINT"} for i in idx]}
+    else:
+        out = {"video_summary": "Localized summary.", "localized": [
+            {"index": i, "title": f"Localized {i}", "hook_text": "Localized hook", "summary": "s", "why_viral": "w",
+             "description": "d", "hashtags": ["clips"], "thumbnail_text": "LOCALIZED"} for i in idx]}
 elif "video_summary" in props:
     out = json.loads(os.environ["FAKE_ANALYSIS"])
 elif "project_id" in props:

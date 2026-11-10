@@ -7,6 +7,7 @@ Dois backends:
 from __future__ import annotations
 
 import json
+import re
 
 from .transcribe import all_words
 
@@ -84,8 +85,9 @@ Rules:
 - why_viral: 1-2 concrete sentences on why this moment grabs attention (the hook, the emotion, the payoff).
 
 Language (very important):
+{language_rule}
 - ALL text fields (title, hook_text, description, hashtags, thumbnail_text, summary, why_viral, video_summary)
-  are written in the requested output language, whatever language is spoken in the video.
+  are written in the output language above, whatever language is spoken in the video.
 - Write like a native creator in that language posting to YouTube Shorts/TikTok: natural, punchy, idiomatic.
   Never a literal translation. Quotes from the stream may stay in the original wording when they are the joke.
 - Title <= 70 characters, curiosity without fake clickbait.
@@ -124,15 +126,32 @@ def _chunks(segments: list[dict], max_chars: int) -> list[list[dict]]:
 
 LANG_NAMES = {"en": "English", "pt-PT": "European Portuguese (pt-PT)", "pt-BR": "Brazilian Portuguese (pt-BR)",
               "pt": "Portuguese", "es": "Spanish", "fr": "French", "de": "German", "it": "Italian"}
-LEGACY_LANGUAGE = "pt-PT"   # análises em cache sem `metadata_language` foram geradas em pt-PT
+LEGACY_LANGUAGE = "pt-PT"   # análises em cache sem etiqueta de idioma foram geradas em pt-PT
 
 
 def lang_name(code: str) -> str:
     return LANG_NAMES.get(code, code)
 
 
+def _is_english(code: str) -> bool:
+    return code.lower().split("-")[0] == "en"
+
+
+def language_rule(cfg: dict) -> str:
+    """Regra dura no system prompt. O idioma vem só de cfg["output_language"]."""
+    lang = cfg["output_language"]
+    if _is_english(lang):
+        return ("ALL PUBLIC-FACING OUTPUT MUST BE WRITTEN IN ENGLISH. NEVER GENERATE PORTUGUESE HOOKS, TITLES, "
+                "DESCRIPTIONS, HASHTAGS, THUMBNAIL TEXT OR VIDEO OVERLAYS.")
+    return f"ALL PUBLIC-FACING OUTPUT MUST BE WRITTEN IN {lang_name(lang).upper()}."
+
+
+def system_prompt(cfg: dict) -> str:
+    return SYSTEM.replace("{language_rule}", language_rule(cfg))
+
+
 def _language_line(cfg: dict) -> str:
-    name = lang_name(cfg["analyze"]["metadata_language"])
+    name = lang_name(cfg["output_language"])
     return (f"Output language for ALL text fields: {name}. Natural, native-sounding {name} for YouTube Shorts/TikTok, "
             f"even if the stream is in another language.")
 
@@ -261,14 +280,14 @@ def analyze(transcript: dict, meta: dict, cfg: dict, tracker=None) -> dict:
                     f"({segs[0]['start']:.0f}s to {segs[-1]['end']:.0f}s). Analyse only this part.")
         user = _user_prompt(segs, meta, cfg, part)
         print(f"[analyze] backend={backend} parte {k}/{len(parts)} (~{len(user) // 4} tokens)")
-        res = call(SYSTEM, user, cfg, tracker)
+        res = call(system_prompt(cfg), user, cfg, tracker)
         summ = res.get("video_summary", "").strip()
         if summ and summ not in merged["video_summary"]:
             merged["video_summary"] += (" " if merged["video_summary"] else "") + summ
         merged["clips"] += res.get("clips", [])
     if len(parts) > 1:
         merged["clips"] = _dedupe(merged["clips"])
-    merged["metadata_language"] = cfg["analyze"]["metadata_language"]
+    merged["output_language"] = cfg["output_language"]
     return merged
 
 
@@ -292,6 +311,7 @@ LOCALIZE_SCHEMA = {
 }
 
 LOCALIZE_SYSTEM = """You are a senior short-form editor (YouTube Shorts, TikTok, Reels).
+{language_rule}
 The clips below were already chosen and scored. Do NOT change which moments they are.
 Rewrite ONLY their text fields (title, hook_text, summary, why_viral, description, hashtags, thumbnail_text)
 and the video_summary in the requested output language, as a native creator would write them:
@@ -302,32 +322,115 @@ Return one entry per clip with the same index.
 """
 
 
-def localize(raw: dict, transcript: dict, meta: dict, cfg: dict, tracker=None) -> dict:
-    """Reescreve os textos de uma análise em cache no idioma configurado, sem mudar momentos nem scores."""
+def localize(raw: dict, transcript: dict, meta: dict, cfg: dict, tracker=None,
+             only: list[int] | None = None, feedback: str = "") -> dict:
+    """Reescreve os textos de uma análise no idioma configurado, sem mudar momentos nem scores.
+    only: índices dos candidatos a reescrever (por defeito todos)."""
     backend = cfg["analyze"]["backend"]
     call = _call_claude_code if backend == "claude_code" else _call_api
     words = all_words(transcript)
+    todo = list(range(len(raw["clips"]))) if only is None else only
     items = []
-    for i, c in enumerate(raw["clips"]):
+    for i in todo:
+        c = raw["clips"][i]
         text = " ".join(w["word"] for w in words if w["start"] >= c["start"] - 0.5 and w["end"] <= c["end"] + 0.5)
         items.append({"index": i, "category": c["category"], **{k: c[k] for k in TEXT_FIELDS},
                       "transcript": text[:3000]})
     user = (f'Source: "{meta.get("title")}" from the channel "{meta.get("channel")}".\n'
             f"{_language_line(cfg)}\n\n"
             f"video_summary: {raw.get('video_summary', '')}\n\n"
-            f"Clips (JSON):\n{json.dumps(items, ensure_ascii=False, indent=1)}\n")
-    print(f"[analyze] a traduzir os textos de {len(items)} candidato(s) para {cfg['analyze']['metadata_language']}")
-    res = call(LOCALIZE_SYSTEM, user, cfg, tracker, LOCALIZE_SCHEMA)
+            + (f"REJECTED PREVIOUS ATTEMPT: {feedback}\n\n" if feedback else "")
+            + f"Clips (JSON):\n{json.dumps(items, ensure_ascii=False, indent=1)}\n")
+    print(f"[analyze] a reescrever os textos de {len(items)} candidato(s) em {cfg['output_language']}")
+    res = call(LOCALIZE_SYSTEM.replace("{language_rule}", language_rule(cfg)), user, cfg, tracker, LOCALIZE_SCHEMA)
     out = json.loads(json.dumps(raw))
     by_index = {x["index"]: x for x in res.get("localized", [])}
-    missing = [i for i in range(len(out["clips"])) if i not in by_index]
+    missing = [i for i in todo if i not in by_index]
     if missing:
         raise RuntimeError(f"Tradução incompleta: faltam os candidatos {missing}")
-    for i, c in enumerate(out["clips"]):
-        c.update({k: by_index[i][k] for k in TEXT_FIELDS})
+    for i in todo:
+        out["clips"][i].update({k: by_index[i][k] for k in TEXT_FIELDS})
     out["video_summary"] = res.get("video_summary") or out.get("video_summary", "")
-    out["metadata_language"] = cfg["analyze"]["metadata_language"]
+    out["output_language"] = cfg["output_language"]
     return out
+
+
+# ---------------------------------------------------------------- validação do idioma (não confiar só no prompt)
+PUBLIC_FIELDS = ["hook_text", "title", "description", "thumbnail_text", "hashtags"]
+MAX_LANGUAGE_RETRIES = 2
+
+# Palavras que só aparecem em português (evita colisões com inglês: "a", "e", "o", "do", "no", "em", "um", "de"...).
+PT_WORDS = set("""
+não nao isto isso esse essa este esta está estão estás você vocês voce ele eles elas lhe lhes uma umas uns
+para pra mas porque quando muito muita muitos depois já também só então aqui agora nunca sempre pelo pela
+pelos pelas nos ao aos foi ficou fica disseram disse direto pleno sem ninguém alguém tudo nada mais fato festa
+quem onde como ficar vai vou têm são seu sua meu minha nosso nossa coisa gente mano vez ainda pode sobre que
+olha olhem tirem leva levou entrar entra ligam ligou ligar descobre pagou partiram regras convidaram casa
+cabem vinga percebe ninguem engraçado melhor pior hoje ontem amanhã contra até
+""".split())
+PT_STRONG_CHARS = set("ãõç")
+ACCENTED = set("àáâéêíóôú")
+
+
+def portuguese_hits(text: str) -> list[str]:
+    """Indícios de português num texto ([] = parece não ser português)."""
+    low = text.lower()
+    tokens = re.findall(r"[^\W\d_]+", low)
+    words = [t for t in tokens if t in PT_WORDS]
+    strong = sorted({ch for ch in low if ch in PT_STRONG_CHARS})
+    accents = any(ch in ACCENTED for ch in low)
+    short = len(tokens) <= 4                    # hooks curtos / thumbnails: basta uma palavra portuguesa
+    if strong or len(words) >= 2 or (words and (accents or short)):
+        return words + strong
+    return []
+
+
+def language_problems(clip: dict, cfg: dict) -> dict[str, list[str]]:
+    """Campos públicos de um clip que não estão no output_language (só verificado para inglês)."""
+    if not _is_english(cfg["output_language"]):
+        return {}
+    probs = {}
+    for f in PUBLIC_FIELDS:
+        v = clip.get(f, "")
+        hits = portuguese_hits(" ".join(v) if isinstance(v, list) else str(v))
+        if hits:
+            probs[f] = hits
+    return probs
+
+
+def check_public_language(clip: dict, cfg: dict) -> None:
+    """Última barreira antes de queimar texto no vídeo."""
+    probs = language_problems(clip, cfg)
+    if probs:
+        raise RuntimeError(f"Texto público fora de {cfg['output_language']} em {clip.get('title')!r}: {probs}. "
+                           "Não vou renderizar.")
+
+
+def text_language(raw: dict) -> str:
+    return raw.get("output_language") or raw.get("metadata_language") or LEGACY_LANGUAGE
+
+
+def ensure_language(raw: dict, transcript: dict, meta: dict, cfg: dict, tracker=None) -> dict:
+    """Garante que todos os textos públicos estão no output_language:
+    1) análise noutro idioma (ex.: cache antiga em pt-PT) -> textos regenerados, momentos mantidos;
+    2) validação em código; candidatos com português são regenerados (até MAX_LANGUAGE_RETRIES vezes);
+    3) se continuar a falhar, pára em vez de renderizar texto no idioma errado."""
+    lang = cfg["output_language"]
+    if text_language(raw) != lang:
+        print(f"[analyze] textos em cache em {text_language(raw)} != output_language {lang}: a regenerar")
+        raw = localize(raw, transcript, meta, cfg, tracker)
+    for attempt in range(MAX_LANGUAGE_RETRIES + 1):
+        bad = {i: p for i, c in enumerate(raw["clips"]) if (p := language_problems(c, cfg))}
+        if not bad:
+            return raw
+        print(f"[analyze] ⚠ português detetado em {len(bad)} candidato(s) com output_language={lang}: {bad}")
+        if attempt == MAX_LANGUAGE_RETRIES:
+            break
+        fb = "; ".join(f"index {i}: " + ", ".join(f"{f} contains Portuguese ({h})" for f, h in p.items())
+                       for i, p in bad.items())
+        raw = localize(raw, transcript, meta, cfg, tracker, only=list(bad), feedback=fb)
+    raise RuntimeError(f"O Claude continuou a devolver português em vez de {lang_name(lang)} depois de "
+                       f"{MAX_LANGUAGE_RETRIES} tentativas: {bad}. Nada foi renderizado.")
 
 
 def _dedupe(clips: list[dict]) -> list[dict]:

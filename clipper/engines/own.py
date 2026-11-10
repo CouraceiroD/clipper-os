@@ -29,7 +29,8 @@ def run(meta: dict, transcript: dict, cfg: dict, db, tracker, out_dir: Path,
             raw = json.loads(raw_path.read_text(encoding="utf-8"))
         else:
             raw = an.analyze(transcript, meta, cfg, tracker)
-            raw_path.write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
+        raw = an.ensure_language(raw, transcript, meta, cfg, tracker)   # cache noutro idioma / português -> regenera
+        raw_path.write_text(json.dumps(raw, indent=2, ensure_ascii=False), encoding="utf-8")
     db.reset_source(meta["source_id"])
     candidates = an.select(raw, transcript, cfg, db, meta["source_id"])
     print(f"[own] {len(candidates)} candidato(s) de {len(raw['clips'])} propostos")
@@ -77,6 +78,7 @@ def render_items(meta: dict, transcript: dict, candidates: list[dict], cfg: dict
             "estimated_cost_usd": round(analyze_cost / max(len(candidates), 1), 4),
         }
         if i <= c["max_renders"]:
+            an.check_public_language(h, cfg)
             work = out_dir / "_work" / f"clip-{i:02d}"
             t = time.time()
             with tracker.stage("own.render"):

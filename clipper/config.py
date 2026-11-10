@@ -7,6 +7,9 @@ from pathlib import Path
 import yaml
 
 DEFAULTS: dict = {
+    # Idioma de TODO o texto público (título, hook, descrição, hashtags, thumbnail, texto no vídeo).
+    # Valor único e explícito: nunca é deduzido do sistema, do locale, da conversa nem de caches.
+    "output_language": "en",
     "workdir": "./data",           # cache: downloads, transcrições, histórico SQLite
     "output_dir": "./outputs",     # resultados por VOD: own/, opusclip/, comparison.json, report.md
     "clipping": {
@@ -37,7 +40,6 @@ DEFAULTS: dict = {
         "min_score": 65,
         "min_duration": 20,
         "max_duration": 75,
-        "metadata_language": "en",  # idioma de títulos, hooks, descrições, hashtags e thumbnails
         "channel_context": "",
     },
     "render": {
@@ -78,6 +80,10 @@ def load_config(path: str | None = None) -> dict:
         if c and Path(c).exists():
             user = yaml.safe_load(Path(c).read_text(encoding="utf-8")) or {}
             break
+    if "metadata_language" in (user.get("analyze") or {}):
+        print("⚠ config: analyze.metadata_language já não é usado e foi ignorado; o idioma vem só de output_language "
+              f"(atual: {user.get('output_language', DEFAULTS['output_language'])}).")
+        user["analyze"].pop("metadata_language")
     cfg = _merge(DEFAULTS, user)
     for k in ("workdir", "output_dir"):
         cfg[k] = str(Path(cfg[k]).expanduser().resolve())
