@@ -20,12 +20,13 @@ sys.path.insert(0, str(ROOT / "tests"))
 from smoke_test import fake_clip, fake_transcript, make_video  # noqa: E402
 
 FAKE_CLAUDE = r'''#!/usr/bin/env python3
-import json, os, sys
+import json, os, pathlib, sys
+sys.stdin.reconfigure(encoding="utf-8")
 args = sys.argv[1:]
 schema = json.loads(args[args.index("--json-schema") + 1])
 props = schema.get("properties", {})
 prompt = sys.stdin.read()
-with open(os.environ["FAKE_CLAUDE_LOG"], "a") as f:
+with open(os.environ["FAKE_CLAUDE_LOG"], "a", encoding="utf-8") as f:
     f.write(json.dumps({"args": args, "prompt": prompt[:200]}) + "\n")
 mp4 = os.environ["FAKE_OPUS_MP4"]
 if "video_summary" in props:
@@ -41,7 +42,7 @@ elif "total_clips_in_project" in props:
                 "duration": e - s, "virality_score": 99 - rank, "hook_score": 9, "coherence_score": 8,
                 "connection_score": 7, "trend_score": None, "reason_selected": "strong hook", "hook": "wow",
                 "transcript": None, "description": "d", "hashtags": ["x"], "exported": exp,
-                "download_url": ("file://" + mp4) if exp else None, "preview_url": None}
+                "download_url": pathlib.Path(mp4).as_uri() if exp else None, "preview_url": None}
     out = {"clips": [c(1, 12, 38, True), c(2, 40, 58, True), c(3, 1, 9, False)],
            "total_clips_in_project": 7, "credits_after": 870, "credits_unit": "credits", "notes": "ok"}
 else:
@@ -63,7 +64,7 @@ def main():
     bindir = tmp / "bin"
     bindir.mkdir()
     fc = bindir / "claude"
-    fc.write_text(FAKE_CLAUDE)
+    fc.write_text(FAKE_CLAUDE, encoding="utf-8")
     fc.chmod(fc.stat().st_mode | stat.S_IEXEC)
     if os.name == "nt":  # no Windows o PATH só encontra .cmd/.exe
         (bindir / "claude.cmd").write_text(f'@"{sys.executable}" "%~dp0claude" %*\n')
@@ -74,8 +75,8 @@ def main():
                       FAKE_OPUS_MP4=str(opus_mp4), FAKE_ANALYSIS=json.dumps(analysis))
 
     cfgp = tmp / "config.yaml"
-    cfgp.write_text(f"""workdir: {tmp / 'data'}
-output_dir: {tmp / 'outputs'}
+    cfgp.write_text(f"""workdir: {(tmp / 'data').as_posix()}
+output_dir: {(tmp / 'outputs').as_posix()}
 clipping: {{provider: compare, max_candidates: 5, max_renders: 3}}
 opusclip: {{poll_seconds: 0, max_wait_minutes: 1}}
 analyze: {{backend: claude_code, min_duration: 10, max_duration: 40}}
@@ -113,10 +114,10 @@ render: {{font: Inter}}
     assert cmp["costs"]["opusclip"]["credits_used"] == 30
     assert cmp["shared_moments"] and cmp["shared_moments"][0]["own_rank"] == 1
     assert own[0]["media"]["height"] == 1920
-    report = (out / "report.md").read_text()
+    report = (out / "report.md").read_text(encoding="utf-8")
     assert "Avaliação manual" in report and "Créditos OpusClip" in report
 
-    calls = [json.loads(l) for l in log.read_text().splitlines()]
+    calls = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()]
     opus_calls = [c for c in calls if "mcp__opusclip" in " ".join(c["args"])]
     assert len(opus_calls) == 3, len(opus_calls)                         # submit, status, fetch
     assert sum("proj_" not in c["prompt"] and "criar UM projeto" in c["prompt"] for c in opus_calls) == 1
@@ -124,7 +125,7 @@ render: {{font: Inter}}
     # Segunda execução: tudo em cache -> não volta a submeter nem a analisar
     n_before = len(calls)
     cli.main(["--config", str(cfgp), "run", url, "--yes"])
-    calls2 = [json.loads(l) for l in log.read_text().splitlines()]
+    calls2 = [json.loads(l) for l in log.read_text(encoding="utf-8").splitlines()]
     assert len(calls2) == n_before, "re-execução não devia chamar o Claude/OpusClip outra vez"
     costs2 = json.loads((out / "costs.json").read_text())
     assert costs2["runs"] == 2 and costs2["claude"]["cost_usd"] > 0, "custos da 1.ª execução perdidos"

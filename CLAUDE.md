@@ -15,6 +15,21 @@ autopublicação, analytics.
 - Re-render own: `python -m clipper render <vod-id>` (depois de editar `outputs/<vod-id>/own/highlights.json`)
 - Testes (sem rede/API/créditos): `python tests/smoke_test.py && python tests/test_compare_flow.py`
 
+## Escolha do modelo Whisper (`transcribe` no config.yaml)
+Verificar a GPU com `nvidia-smi`. Não escolher um modelo acima do que a VRAM aguenta.
+
+| Hardware | model | device | compute_type |
+|---|---|---|---|
+| Sem GPU NVIDIA | small | cpu | int8 |
+| NVIDIA < 4 GB VRAM | small | cuda | int8_float16 |
+| NVIDIA 4–6 GB | medium | cuda | int8_float16 |
+| NVIDIA 6–8 GB | large-v3-turbo | cuda | int8_float16 |
+| NVIDIA ≥ 8 GB | large-v3-turbo | cuda | float16 |
+
+Para CUDA o faster-whisper precisa de cuBLAS 12 e cuDNN 9 (`pip install nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"`).
+Se der erro de DLL/biblioteca CUDA em falta e não se resolver sem instalar software pago, voltar a `cpu` e avisar.
+Validar com uma transcrição curta (ex.: 10 s de áudio gerado com FFmpeg), nunca com um VOD.
+
 ## Estrutura
 - `clipper/cli.py` orquestração (submete OpusClip primeiro, corre own em paralelo, depois compara)
 - `clipper/engines/own.py` análise Claude + render FFmpeg → formato comum

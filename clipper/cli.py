@@ -208,6 +208,11 @@ def cmd_history(args, cfg) -> None:
 
 
 def main(argv=None) -> None:
+    for stream in (sys.stdout, sys.stderr):  # Windows: evita erros de encoding com emojis/acentos em pipes
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     p = argparse.ArgumentParser(prog="clipper")
     p.add_argument("--config", default=None)
     sub = p.add_subparsers(dest="cmd", required=True)
