@@ -1,6 +1,32 @@
+# Dados, cache e resultados (grandes / pessoais)
 data/
+outputs/
+_work/
+*.mp4
+*.mkv
+*.webm
+*.mov
+*.m4a
+*.wav
+*.part
+*.ass
+
+# Configuração local e segredos
 config.yaml
 .env
+.env.*
+*.pem
+*.key
+cookies*.txt
+*cookies*.json
+*token*.json
+client_secret*.json
+credentials*.json
+oauth*.json
+.claude/settings.local.json
+
+# Python
 .venv/
+venv/
 __pycache__/
 *.pyc
