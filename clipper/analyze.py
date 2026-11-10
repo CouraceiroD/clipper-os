@@ -7,8 +7,6 @@ Dois backends:
 from __future__ import annotations
 
 import json
-import shutil
-import subprocess
 
 from .transcribe import all_words
 
@@ -96,7 +94,7 @@ Transcrição ([início-fim em segundos] texto):
 """
 
 
-def _call_api(system: str, user: str, cfg: dict) -> dict:
+def _call_api(system: str, user: str, cfg: dict, tracker=None) -> dict:
     import anthropic
 
     a = cfg["analyze"]
@@ -120,25 +118,24 @@ def _call_api(system: str, user: str, cfg: dict) -> dict:
         raise RuntimeError("Resposta truncada (max_tokens). Reduz max_clips.")
     u = msg.usage
     print(f"[analyze] tokens in={u.input_tokens} out={u.output_tokens} modelo={msg.model}")
+    if tracker:
+        tracker.claude("own.analyze", msg.model, u.input_tokens, u.output_tokens,
+                       getattr(u, "cache_read_input_tokens", 0) or 0, backend="api")
     text = next(b.text for b in msg.content if b.type == "text")
     return json.loads(text)
 
 
-def _call_claude_code(system: str, user: str, cfg: dict) -> dict:
-    if not shutil.which("claude"):
-        raise RuntimeError("Comando `claude` não encontrado. Instala o Claude Code ou usa backend: api")
-    a = cfg["analyze"]
-    cmd = ["claude", "-p", "--output-format", "json", "--json-schema", json.dumps(SCHEMA),
-           "--model", a["model"], "--append-system-prompt", system,
-           "--disallowedTools", "Bash,Edit,Write,WebFetch,WebSearch"]
-    res = subprocess.run(cmd, input=user, capture_output=True, text=True, encoding="utf-8")
-    if res.returncode != 0:
-        raise RuntimeError(f"claude -p falhou: {res.stderr[-2000:]}")
-    data = json.loads(res.stdout)
-    if isinstance(data.get("structured_output"), dict):
-        return data["structured_output"]
-    text = data.get("result", "")
-    return json.loads(text[text.find("{"): text.rfind("}") + 1])
+def _call_claude_code(system: str, user: str, cfg: dict, tracker=None) -> dict:
+    from . import claude_cli
+
+    model = cfg["analyze"]["model"]
+    out, info = claude_cli.run(user, SCHEMA, model=model, system=system,
+                               disallowed_tools=["Bash", "Edit", "Write", "WebFetch", "WebSearch"])
+    print(f"[analyze] tokens in={info['input_tokens']} out={info['output_tokens']} (claude -p)")
+    if tracker:
+        tracker.claude("own.analyze", model, info["input_tokens"], info["output_tokens"],
+                       info["cache_read"], info["cost_usd"], backend="claude_code")
+    return out
 
 
 def _snap(h: dict, words: list[dict]) -> None:
@@ -162,7 +159,7 @@ def select(raw: dict, transcript: dict, cfg: dict, db, source_id: str) -> list[d
             reason = f"score {h['viral_score']} < {a['min_score']}"
         elif dur < a["min_duration"] * 0.7 or dur > a["max_duration"] * 1.5:
             reason = f"duração {dur:.0f}s fora do intervalo"
-        elif any(min(h["end"], c["end"]) - max(h["start"], c["start"]) > 0 for c in chosen):
+        elif any(min(h["end"], c["end"]) - max(h["start"], c["start"]) > 1.5 for c in chosen):
             reason = "sobrepõe-se a outro clip escolhido"
         elif db.overlaps_existing(source_id, h["start"], h["end"]):
             reason = "já existe no histórico"
@@ -177,10 +174,10 @@ def select(raw: dict, transcript: dict, cfg: dict, db, source_id: str) -> list[d
     return chosen
 
 
-def analyze(transcript: dict, meta: dict, cfg: dict) -> dict:
+def analyze(transcript: dict, meta: dict, cfg: dict, tracker=None) -> dict:
     user = _user_prompt(transcript, meta, cfg)
     backend = cfg["analyze"]["backend"]
     print(f"[analyze] backend={backend} ({len(user) // 4} tokens aprox.)")
     if backend == "claude_code":
-        return _call_claude_code(SYSTEM, user, cfg)
-    return _call_api(SYSTEM, user, cfg)
+        return _call_claude_code(SYSTEM, user, cfg, tracker)
+    return _call_api(SYSTEM, user, cfg, tracker)
