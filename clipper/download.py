@@ -31,8 +31,7 @@ def fetch(url_or_path: str, cfg: dict) -> dict:
     import yt_dlp  # import tardio: não é preciso para ficheiros locais
 
     # 1) só metadados, para saber o id e evitar descarregar duas vezes
-    with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True}) as ydl:
-        info = ydl.extract_info(url_or_path, download=False)
+    info = _info(url_or_path)
     sid = f"{info['extractor_key'].lower()}:{info['id']}"
     d = source_dir(cfg["workdir"], sid)
     cached = d / "source.json"
@@ -64,6 +63,26 @@ def fetch(url_or_path: str, cfg: dict) -> dict:
     }
     _save(cfg, meta)
     return meta
+
+
+def _info(url: str) -> dict:
+    import yt_dlp
+
+    with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True}) as ydl:
+        return ydl.extract_info(url, download=False)
+
+
+def probe_meta(url_or_path: str) -> dict:
+    """Metadados sem descarregar (id, título, duração). Para ficheiros locais usa ffprobe."""
+    p = Path(url_or_path).expanduser()
+    if p.exists():
+        p = p.resolve()
+        return {"source_id": "local:" + hashlib.sha1(str(p).encode()).hexdigest()[:12], "url": str(p),
+                "title": p.stem, "channel": "local", "duration": _probe_duration(p)}
+    info = _info(url_or_path)
+    return {"source_id": f"{info['extractor_key'].lower()}:{info['id']}", "url": url_or_path,
+            "title": info.get("title"), "channel": info.get("channel") or info.get("uploader"),
+            "duration": info.get("duration"), "is_live": info.get("is_live")}
 
 
 def _save(cfg: dict, meta: dict) -> None:

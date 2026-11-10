@@ -7,7 +7,19 @@ from pathlib import Path
 import yaml
 
 DEFAULTS: dict = {
-    "workdir": "./data",
+    "workdir": "./data",           # cache: downloads, transcrições, histórico SQLite
+    "output_dir": "./outputs",     # resultados por VOD: own/, opusclip/, comparison.json, report.md
+    "clipping": {
+        "provider": "own",         # own | opusclip | compare
+        "max_candidates": 5,
+        "max_renders": 3,
+        "max_vod_minutes": 240,    # proteção de custos: recusa VODs maiores sem --force
+    },
+    "opusclip": {
+        "operator_model": "claude-opus-5-5",  # modelo do `claude -p` que opera o MCP
+        "poll_seconds": 120,
+        "max_wait_minutes": 90,
+    },
     "download": {"max_height": 1080},
     "transcribe": {
         "model": "small",          # tiny | base | small | medium | large-v3
@@ -65,6 +77,7 @@ def load_config(path: str | None = None) -> dict:
             user = yaml.safe_load(Path(c).read_text(encoding="utf-8")) or {}
             break
     cfg = _merge(DEFAULTS, user)
-    cfg["workdir"] = str(Path(cfg["workdir"]).expanduser().resolve())
-    Path(cfg["workdir"]).mkdir(parents=True, exist_ok=True)
+    for k in ("workdir", "output_dir"):
+        cfg[k] = str(Path(cfg[k]).expanduser().resolve())
+        Path(cfg[k]).mkdir(parents=True, exist_ok=True)
     return cfg

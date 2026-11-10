@@ -49,7 +49,7 @@ class DB:
                           min_overlap: float = 0.4) -> bool:
         """True se já existe um clip desta fonte que cobre >= min_overlap deste intervalo."""
         rows = self.conn.execute(
-            'SELECT start, "end" FROM clips WHERE source_id=? AND status != "rejected"',
+            'SELECT start, "end" FROM clips WHERE source_id=? AND status != \'rejected\'',
             (source_id,),
         ).fetchall()
         length = max(end - start, 1e-6)
@@ -68,6 +68,13 @@ class DB:
         )
         self.conn.commit()
         return cur.lastrowid
+
+    def reset_source(self, source_id: str) -> int:
+        """Ao repetir o mesmo VOD, apaga clips ainda não aprovados/publicados para não se bloquearem a si próprios."""
+        cur = self.conn.execute(
+            "DELETE FROM clips WHERE source_id=? AND status = 'rendered'", (source_id,))
+        self.conn.commit()
+        return cur.rowcount
 
     def list_clips(self, limit: int = 50) -> list[sqlite3.Row]:
         return self.conn.execute(
