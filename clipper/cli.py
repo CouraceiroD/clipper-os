@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -71,6 +72,8 @@ def cmd_run(args, cfg) -> None:
     if "opusclip" in providers and not args.dry_run:
         from .engines.opusclip import OpusClipEngine
         opus = OpusClipEngine(cfg, tracker, out / "opusclip")
+        if not opus.state.get("fetch"):
+            _require_opusclip()   # falha cedo, antes de confirmar créditos ou fazer download
         if not opus.state.get("project_id"):
             if not _confirm(f"OpusClip vai processar ~{minutes:.0f} min de vídeo e consumir créditos. Continuar?",
                             args.yes):
@@ -152,54 +155,96 @@ def cmd_render(args, cfg) -> None:
 
 
 # ------------------------------------------------------------------ doctor
+MCP_HINTS = {
+    "missing": "na pasta do projeto: claude mcp add --transport http opusclip https://mcp.opus.pro/mcp",
+    "needs_auth": "abre `claude` na pasta do projeto, escreve /mcp, escolhe opusclip e faz login no browser",
+    "failed": "verifica a internet/firewall; depois /mcp no Claude Code para voltar a ligar",
+    "no_claude": "instala o Claude Code",
+}
+
+
 def cmd_doctor(args, cfg) -> None:
+    from .claude_cli import mcp_status, resolve_claude
+
     ok = True
 
-    def check(name, cond, hint=""):
+    def check(name, cond, hint="", required=True):
         nonlocal ok
-        print(f"{'✅' if cond else '❌'} {name}" + ("" if cond else f"  -> {hint}"))
-        ok &= bool(cond)
+        mark = "✅" if cond else ("❌" if required else "⚠️ ")
+        print(f"{mark} {name}" + ("" if cond else f"  -> {hint}"))
+        if required:
+            ok &= bool(cond)
 
-    check("ffmpeg", shutil.which("ffmpeg"), "instala o FFmpeg e põe-no no PATH")
+    print(f"Python {sys.version.split()[0]} · {sys.platform} · projeto em {Path(__file__).resolve().parents[1]}")
+    check("Python >= 3.10", sys.version_info >= (3, 10), "instala Python 3.10+")
+    check("ffmpeg", shutil.which("ffmpeg"), "Windows: winget install Gyan.FFmpeg (e reabre o terminal)")
     check("ffprobe", shutil.which("ffprobe"), "vem com o FFmpeg")
-    for mod, hint in [("yt_dlp", "pip install -r requirements.txt"), ("faster_whisper", "pip install -r requirements.txt"),
-                      ("anthropic", "pip install -r requirements.txt")]:
+    for mod in ("yt_dlp", "faster_whisper", "anthropic", "yaml"):
         try:
             __import__(mod)
             check(mod, True)
         except ImportError:
-            check(mod, False, hint)
+            check(mod, False, "pip install -r requirements.txt")
+    check("runtime JS para o yt-dlp (deno ou node)", shutil.which("deno") or shutil.which("node"),
+          "o YouTube pode exigir um runtime JS: winget install DenoLand.Deno", required=False)
+
+    t = cfg["transcribe"]
+    gpu = shutil.which("nvidia-smi")
+    if gpu:
+        try:
+            q = subprocess.run([gpu, "--query-gpu=name,memory.total", "--format=csv,noheader"],
+                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20)
+            print(f"ℹ️  GPU: {q.stdout.strip() or 'nvidia-smi sem resposta'}")
+        except (OSError, subprocess.TimeoutExpired):
+            print("ℹ️  GPU: nvidia-smi falhou")
+    else:
+        print("ℹ️  GPU NVIDIA: não encontrada (Whisper em CPU)")
+    print(f"ℹ️  Whisper: model={t['model']} device={t['device']} compute_type={t['compute_type']}")
+
     if cfg["analyze"]["backend"] == "api":
-        import os
         check("ANTHROPIC_API_KEY definida (backend api)", os.environ.get("ANTHROPIC_API_KEY"),
               "define a variável de ambiente ou usa analyze.backend: claude_code")
-    has_claude = shutil.which("claude")
-    check("Claude Code (claude)", has_claude, "instala o Claude Code")
-    if has_claude:
-        res = subprocess.run([has_claude, "mcp", "list"], capture_output=True, text=True, timeout=120)
-        line = next((l for l in res.stdout.splitlines() if l.lower().startswith("opusclip")), "")
-        check("MCP opusclip configurado", line,
-              "claude mcp add --transport http opusclip https://mcp.opus.pro/mcp")
-        if line:
-            connected = "connected" in line.lower() and "not connected" not in line.lower()
-            check(f"MCP opusclip ligado ({line.split(' - ')[-1].strip()})", connected,
-                  "abre `claude` nesta pasta, escreve /mcp, escolhe opusclip e faz login (OAuth)")
+    base = resolve_claude()
+    check("Claude Code (claude)", base, MCP_HINTS["no_claude"])
+    if base:
+        print(f"ℹ️  claude: {' '.join(base)}")
+        status, line = mcp_status("opusclip")
+        check("MCP opusclip configurado", status != "missing", MCP_HINTS["missing"])
+        if status != "missing":
+            check(f"MCP opusclip ligado ({line})", status == "connected", MCP_HINTS.get(status, ""),
+                  required=cfg["clipping"]["provider"] != "own")
     print("\nTudo pronto." if ok else "\nCorrige os ❌ acima.")
+    if not ok:
+        sys.exit(1)
+
+
+def _require_opusclip() -> None:
+    from .claude_cli import mcp_status
+
+    status, line = mcp_status("opusclip")
+    if status != "connected":
+        sys.exit(f"MCP opusclip não está pronto ({status}: {line or '-'}).\n-> {MCP_HINTS.get(status, '')}")
 
 
 def cmd_opusclip_tools(args, cfg) -> None:
+    from .claude_cli import PROJECT_ROOT
     from .engines.opusclip import OpusClipEngine
+
+    _require_opusclip()
     tracker = CostTracker()
     res = OpusClipEngine(cfg, tracker, Path(cfg["output_dir"]) / "_opusclip").list_tools()
-    Path("docs").mkdir(exist_ok=True)
+    if not res["connected"] or not res["tools"]:
+        sys.exit(f"O Claude não conseguiu usar as tools do OpusClip: {res['notes']}\n-> {MCP_HINTS['needs_auth']}")
+    docs = PROJECT_ROOT / "docs"
+    docs.mkdir(exist_ok=True)
     lines = ["# OpusClip MCP — tools disponíveis", "",
              f"Créditos restantes: {res['credits_remaining']} {res['credits_unit'] or ''}", "", res["notes"], "",
              "| Tool | Consome créditos | Descrição | Parâmetros |", "|---|---|---|---|"]
     for t in res["tools"]:
         lines.append(f"| `{t['name']}` | {'sim' if t['consumes_credits'] else 'não'} | {t['description']} | {t['parameters']} |")
-    Path("docs/opusclip_tools.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (docs / "opusclip_tools.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
-    print(f"\nGuardado em docs/opusclip_tools.md · custo Claude ≈ {tracker.claude_cost()} USD")
+    print(f"\nGuardado em {docs / 'opusclip_tools.md'} · custo Claude ≈ {tracker.claude_cost()} USD")
 
 
 def cmd_history(args, cfg) -> None:

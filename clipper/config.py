@@ -28,7 +28,7 @@ DEFAULTS: dict = {
         "language": None,          # None = auto
     },
     "analyze": {
-        "backend": "api",          # api | claude_code
+        "backend": "claude_code",  # claude_code (subscrição, via claude -p) | api (ANTHROPIC_API_KEY)
         "model": "claude-opus-5-5",
         "effort": "medium",
         "max_clips": 8,
